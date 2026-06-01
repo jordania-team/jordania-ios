@@ -131,6 +131,17 @@ struct AuthView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 4)
+
+                // DEBUG: exibe o accessToken truncado para validar a spike.
+                // TODO: Remover antes de produção.
+                if let token = session.currentUser?.accessToken {
+                    let preview = String(token.prefix(24)) + "…"
+                    Text("JWT: \(preview)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospaced()
+                        .padding(.top, 2)
+                }
             }
 
             Spacer()
@@ -179,7 +190,6 @@ struct AuthView: View {
     }
 
     private func signOut() {
-        // Limpa a sessão do SDK Google se o provider ativo for Google
         if session.currentUser?.provider == .google {
             googleAuthService.signOut()
         }
