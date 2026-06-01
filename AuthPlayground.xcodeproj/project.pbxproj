@@ -9,10 +9,13 @@
 /* Begin PBXBuildFile section */
 		693F101E2FCD2546007C635A /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 693F101D2FCD2546007C635A /* GoogleSignIn */; };
 		693F10202FCD2546007C635A /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 693F101F2FCD2546007C635A /* GoogleSignInSwift */; };
+		693F10452FCD287A007C635A /* SwiftData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 693F10442FCD287A007C635A /* SwiftData.framework */; };
+		693F10462FCD2896007C635A /* SwiftData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 693F10442FCD287A007C635A /* SwiftData.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		693F0FDA2FCD1239007C635A /* AuthPlayground.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuthPlayground.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		693F10442FCD287A007C635A /* SwiftData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftData.framework; path = System/Library/Frameworks/SwiftData.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -43,6 +46,8 @@
 			files = (
 				693F101E2FCD2546007C635A /* GoogleSignIn in Frameworks */,
 				693F10202FCD2546007C635A /* GoogleSignInSwift in Frameworks */,
+				693F10462FCD2896007C635A /* SwiftData.framework in Frameworks */,
+				693F10452FCD287A007C635A /* SwiftData.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,6 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* AuthPlayground */,
+				693F10432FCD287A007C635A /* Frameworks */,
 				693F0FDB2FCD1239007C635A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -63,6 +69,14 @@
 				693F0FDA2FCD1239007C635A /* AuthPlayground.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		693F10432FCD287A007C635A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				693F10442FCD287A007C635A /* SwiftData.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
