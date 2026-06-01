@@ -36,7 +36,8 @@ final class SessionPersistence {
             userID: user.id,
             name: user.name,
             email: user.email,
-            provider: user.provider
+            provider: user.provider,
+            accessToken: user.accessToken
         )
         modelContext.insert(session)
         try? modelContext.save()
