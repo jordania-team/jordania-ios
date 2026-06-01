@@ -6,24 +6,36 @@
 //
 
 import SwiftUI
+import SwiftData
 import GoogleSignIn
 
 @main
 struct AuthPlaygroundApp: App {
 
+    private let container: ModelContainer
+    private let sessionStore: SessionStore
+
     init() {
         configurarGoogleSignIn()
+
+        // Inicializa o ModelContainer com CachedSession
+        let container = try! ModelContainer(for: CachedSession.self)
+        self.container = container
+
+        // Cria a persistência e a store com a sessão já carregada
+        let persistence = SessionPersistence(modelContext: container.mainContext)
+        self.sessionStore = SessionStore(persistence: persistence)
     }
 
     var body: some Scene {
         WindowGroup {
             AuthView()
-                .environment(SessionStore())
+                .environment(sessionStore)
                 .onOpenURL { url in
-                    // Necessário para o Google capturar o redirect OAuth após autenticar no browser
                     GIDSignIn.sharedInstance.handle(url)
                 }
         }
+        .modelContainer(container)
     }
 
     // MARK: - Private

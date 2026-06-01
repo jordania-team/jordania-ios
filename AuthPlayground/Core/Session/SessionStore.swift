@@ -9,8 +9,9 @@ import Foundation
 import Observation
 
 /// Fonte única de verdade do estado de autenticação.
-/// Observada pela UI via @Environment. Nunca acessa providers diretamente.
+/// Delega persistência para SessionPersistence — não conhece SwiftData diretamente.
 @Observable
+@MainActor
 final class SessionStore {
 
     // MARK: - State
@@ -18,6 +19,17 @@ final class SessionStore {
     var currentUser: AuthenticatedUser?
     var isLoading: Bool = false
     var authError: AuthError?
+
+    // MARK: - Dependencies
+
+    private let persistence: SessionPersistence?
+
+    // MARK: - Init
+
+    init(persistence: SessionPersistence? = nil) {
+        self.persistence = persistence
+        self.currentUser = persistence?.loadSession()
+    }
 
     // MARK: - Computed
 
@@ -31,12 +43,14 @@ final class SessionStore {
         isLoading = false
         currentUser = user
         authError = nil
+        persistence?.save(user)
     }
 
     func signOut() {
         isLoading = false
         currentUser = nil
         authError = nil
+        persistence?.clearAll()
     }
 
     func setError(_ error: AuthError) {
@@ -54,7 +68,7 @@ enum AuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cancelled:
-            return nil // cancelamento não é erro do ponto de vista do usuário
+            return nil
         case .failed(let message):
             return message
         }
