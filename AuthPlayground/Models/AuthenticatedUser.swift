@@ -16,7 +16,8 @@ struct AuthenticatedUser {
     let provider: AuthProvider
 }
 
-enum AuthProvider {
+/// RawRepresentable para permitir persistência como String no SwiftData.
+enum AuthProvider: String {
     case apple
     case google
 }
