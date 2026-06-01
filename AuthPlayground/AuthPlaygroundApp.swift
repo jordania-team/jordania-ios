@@ -11,7 +11,8 @@ import SwiftUI
 struct AuthPlaygroundApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AuthView()
+                .environment(SessionStore())
         }
     }
 }
