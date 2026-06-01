@@ -15,6 +15,7 @@ struct AuthView: View {
 
     @Environment(SessionStore.self) private var session
     @State private var appleAuthService = AppleAuthService()
+    @State private var googleAuthService = GoogleAuthService()
 
     var body: some View {
         NavigationStack {
@@ -58,16 +59,33 @@ struct AuthView: View {
                     ProgressView()
                         .controlSize(.large)
                 } else {
+                    // Apple
                     SignInWithAppleButton(.signIn) { request in
                         request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { _ in
-                        // O fluxo real é coordenado pelo AppleAuthService via Task abaixo.
-                        // Este callback não é usado quando usamos async/await diretamente.
-                    }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
-                    .onTapGesture {
-                        signInWithApple()
+                    } onCompletion: { _ in }
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 50)
+                        .onTapGesture { signInWithApple() }
+
+                    // Google
+                    Button {
+                        signInWithGoogle()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("Entrar com Google")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(.regularMaterial)
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                        }
                     }
                 }
 
@@ -118,7 +136,7 @@ struct AuthView: View {
             Spacer()
 
             Button(role: .destructive) {
-                session.signOut()
+                signOut()
             } label: {
                 Text("Sair")
                     .frame(maxWidth: .infinity)
@@ -144,6 +162,28 @@ struct AuthView: View {
                 session.setError(.failed(error.localizedDescription))
             }
         }
+    }
+
+    private func signInWithGoogle() {
+        session.isLoading = true
+        Task {
+            do {
+                let user = try await googleAuthService.signIn()
+                session.signIn(with: user)
+            } catch AuthError.cancelled {
+                session.isLoading = false
+            } catch {
+                session.setError(.failed(error.localizedDescription))
+            }
+        }
+    }
+
+    private func signOut() {
+        // Limpa a sessão do SDK Google se o provider ativo for Google
+        if session.currentUser?.provider == .google {
+            googleAuthService.signOut()
+        }
+        session.signOut()
     }
 }
 
