@@ -28,18 +28,20 @@ final class SessionStore {
     // MARK: - Actions
 
     func signIn(with user: AuthenticatedUser) {
+        isLoading = false
         currentUser = user
         authError = nil
     }
 
     func signOut() {
+        isLoading = false
         currentUser = nil
         authError = nil
     }
 
     func setError(_ error: AuthError) {
-        authError = error
         isLoading = false
+        authError = error
     }
 }
 
