@@ -16,13 +16,12 @@ struct AuthPlaygroundApp: App {
     private let sessionStore: SessionStore
 
     init() {
-        configurarGoogleSignIn()
+        // Função estática para evitar uso de self antes da inicialização completa
+        Self.configurarGoogleSignIn()
 
-        // Inicializa o ModelContainer com CachedSession
         let container = try! ModelContainer(for: CachedSession.self)
         self.container = container
 
-        // Cria a persistência e a store com a sessão já carregada
         let persistence = SessionPersistence(modelContext: container.mainContext)
         self.sessionStore = SessionStore(persistence: persistence)
     }
@@ -40,7 +39,7 @@ struct AuthPlaygroundApp: App {
 
     // MARK: - Private
 
-    private func configurarGoogleSignIn() {
+    private static func configurarGoogleSignIn() {
         guard
             let path = Bundle.main.path(forResource: "GoogleSignIn-Info", ofType: "plist"),
             let plist = NSDictionary(contentsOfFile: path),
@@ -49,7 +48,6 @@ struct AuthPlaygroundApp: App {
             assertionFailure("GoogleSignIn-Info.plist não encontrado ou CLIENT_ID ausente.")
             return
         }
-
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
     }
 }

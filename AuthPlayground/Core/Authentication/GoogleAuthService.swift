@@ -14,10 +14,8 @@ final class GoogleAuthService {
 
     // MARK: - Public API
 
-    /// Inicia o fluxo de Sign in with Google.
-    /// Requer a rootViewController ativa para apresentar o fluxo OAuth.
     func signIn() async throws -> AuthenticatedUser {
-        guard let rootViewController = await rootViewController() else {
+        guard let rootViewController = rootViewController() else {
             throw AuthError.failed("Não foi possível obter a view controller raiz.")
         }
 
@@ -36,11 +34,8 @@ final class GoogleAuthService {
         )
     }
 
-    /// Restaura a sessão anterior do Google, se existir.
-    /// Deve ser chamado no app launch para evitar login desnecessário.
     func restorePreviousSignIn() async -> AuthenticatedUser? {
         guard GIDSignIn.sharedInstance.hasPreviousSignIn() else { return nil }
-
         do {
             let user = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
             guard let userID = user.userID else { return nil }

@@ -20,8 +20,6 @@ final class AppleAuthService: NSObject {
 
     // MARK: - Public API
 
-    /// Inicia o fluxo de Sign in with Apple.
-    /// Deve ser chamado a partir de uma Task na View ou ViewModel.
     func signIn() async throws -> AuthenticatedUser {
         let nonce = generateNonce()
         currentNonce = nonce
@@ -32,7 +30,6 @@ final class AppleAuthService: NSObject {
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
             controller.performRequests()
@@ -48,7 +45,8 @@ final class AppleAuthService: NSObject {
 
         while remainingLength > 0 {
             var randoms = [UInt8](repeating: 0, count: 16)
-            SecRandomCopyBytes(Security.kSecRandomDefault, randoms.count, &randoms)
+            let status = SecRandomCopyBytes(Security.kSecRandomDefault, randoms.count, &randoms)
+            guard status == errSecSuccess else { continue }
             randoms.forEach { random in
                 if remainingLength == 0 { return }
                 if random < charset.count {
@@ -84,12 +82,11 @@ extension AppleAuthService: ASAuthorizationControllerDelegate {
         let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
             .compactMap { $0 }
             .joined(separator: " ")
-        let email = credential.email
 
         let user = AuthenticatedUser(
             id: userID,
             name: fullName.isEmpty ? nil : fullName,
-            email: email,
+            email: credential.email,
             provider: .apple
         )
 
@@ -101,8 +98,7 @@ extension AppleAuthService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        if let authError = error as? ASAuthorizationError,
-           authError.code == .canceled {
+        if let authError = error as? ASAuthorizationError, authError.code == .canceled {
             continuation?.resume(throwing: AuthError.cancelled)
         } else {
             continuation?.resume(throwing: AuthError.failed(error.localizedDescription))
