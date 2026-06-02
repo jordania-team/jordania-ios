@@ -9,41 +9,65 @@ import GoogleSignIn
 import UIKit
 
 /// Responsável exclusivamente pelo fluxo de Sign in with Google.
-/// Segue o mesmo contrato do AppleAuthService: retorna AuthenticatedUser ou lança AuthError.
+/// Obtém o idToken do Google, envia ao backend e retorna AuthenticatedUser.
+/// Contrato externo mantido: signIn() -> AuthenticatedUser.
 final class GoogleAuthService {
+
+    // MARK: - Dependencies
+
+    private let backendAuthService: BackendAuthService
+
+    // MARK: - Init
+
+    init(backendAuthService: BackendAuthService = BackendAuthService()) {
+        self.backendAuthService = backendAuthService
+    }
 
     // MARK: - Public API
 
     func signIn() async throws -> AuthenticatedUser {
-        guard let rootViewController = rootViewController() else {
+        guard let rootViewController = await rootViewController() else {
             throw AuthError.failed("Não foi possível obter a view controller raiz.")
         }
 
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
-        let user = result.user
+        let googleUser = result.user
 
-        guard let userID = user.userID else {
-            throw AuthError.failed("ID do usuário não disponível.")
+        // Passo 1: obtém o idToken do Google.
+        guard let idToken = googleUser.idToken?.tokenString else {
+            throw AuthError.failed("ID Token do Google não disponível.")
         }
 
+        // Passo 2: troca o idToken pelo JWT do backend.
+        let session = try await backendAuthService.login(
+            provider: .google,
+            identityToken: idToken
+        )
+
         return AuthenticatedUser(
-            id: userID,
-            name: user.profile?.name,
-            email: user.profile?.email,
-            provider: .google
+            id: session.userId,
+            name: session.name,
+            email: session.email,
+            provider: .google,
+            accessToken: session.accessToken
         )
     }
 
     func restorePreviousSignIn() async -> AuthenticatedUser? {
         guard GIDSignIn.sharedInstance.hasPreviousSignIn() else { return nil }
         do {
-            let user = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
-            guard let userID = user.userID else { return nil }
+            let googleUser = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
+            guard let idToken = googleUser.idToken?.tokenString else { return nil }
+            let session = try await backendAuthService.login(
+                provider: .google,
+                identityToken: idToken
+            )
             return AuthenticatedUser(
-                id: userID,
-                name: user.profile?.name,
-                email: user.profile?.email,
-                provider: .google
+                id: session.userId,
+                name: session.name,
+                email: session.email,
+                provider: .google,
+                accessToken: session.accessToken
             )
         } catch {
             return nil

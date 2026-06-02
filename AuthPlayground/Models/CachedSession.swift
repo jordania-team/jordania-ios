@@ -9,8 +9,10 @@ import Foundation
 import SwiftData
 
 /// Modelo persistido localmente com SwiftData.
-/// Armazena apenas dados de perfil não-sensíveis.
-/// Tokens de autenticação NUNCA devem ser armazenados aqui — use Keychain para isso.
+/// Armazena dados de perfil não-sensíveis.
+///
+/// - Warning: `accessTokenRaw` é armazenado aqui apenas para a spike/POC.
+///   Em produção, tokens de autenticação DEVEM ser armazenados exclusivamente no Keychain.
 @Model
 final class CachedSession {
     var userID: String
@@ -18,18 +20,22 @@ final class CachedSession {
     var email: String?
     var providerRaw: String
     var createdAt: Date
+    /// JWT do backend. TODO: Remover daqui e migrar para Keychain antes de produção.
+    var accessTokenRaw: String
 
     init(
         userID: String,
         name: String?,
         email: String?,
-        provider: AuthProvider
+        provider: AuthProvider,
+        accessToken: String
     ) {
         self.userID = userID
         self.name = name
         self.email = email
         self.providerRaw = provider.rawValue
         self.createdAt = .now
+        self.accessTokenRaw = accessToken
     }
 
     var provider: AuthProvider {
@@ -42,7 +48,8 @@ final class CachedSession {
             id: userID,
             name: name,
             email: email,
-            provider: provider
+            provider: provider,
+            accessToken: accessTokenRaw
         )
     }
 }

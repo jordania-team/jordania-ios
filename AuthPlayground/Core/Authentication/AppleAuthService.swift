@@ -10,13 +10,25 @@ import CryptoKit
 import Foundation
 
 /// Responsável exclusivamente pelo fluxo de Sign in with Apple.
-/// Retorna um AuthenticatedUser agnóstico ou lança AuthError.
+/// Obtém o identityToken da Apple, envia ao backend e retorna AuthenticatedUser.
+/// Contrato externo mantido: signIn() -> AuthenticatedUser.
 final class AppleAuthService: NSObject {
+
+    // MARK: - Dependencies
+
+    private let backendAuthService: BackendAuthService
 
     // MARK: - Private State
 
     private var currentNonce: String?
-    private var continuation: CheckedContinuation<AuthenticatedUser, Error>?
+    /// Continuation interna carrega apenas o identityToken — o backend resolve o userId canônico.
+    private var continuation: CheckedContinuation<String, Error>?
+
+    // MARK: - Init
+
+    init(backendAuthService: BackendAuthService = BackendAuthService()) {
+        self.backendAuthService = backendAuthService
+    }
 
     // MARK: - Public API
 
@@ -28,12 +40,27 @@ final class AppleAuthService: NSObject {
         request.requestedScopes = [.fullName, .email]
         request.nonce = sha256(nonce)
 
-        return try await withCheckedThrowingContinuation { continuation in
+        // Passo 1: obtém o identityToken da Apple via delegate.
+        let identityToken = try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
             controller.performRequests()
         }
+
+        // Passo 2: troca o identityToken pelo JWT do backend.
+        let session = try await backendAuthService.login(
+            provider: .apple,
+            identityToken: identityToken
+        )
+
+        return AuthenticatedUser(
+            id: session.userId,
+            name: session.name,
+            email: session.email,
+            provider: .apple,
+            accessToken: session.accessToken
+        )
     }
 
     // MARK: - Nonce Helpers
@@ -73,24 +100,17 @@ extension AppleAuthService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            continuation?.resume(throwing: AuthError.failed("Credencial inválida."))
+        guard
+            let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+            let tokenData = credential.identityToken,
+            let identityToken = String(data: tokenData, encoding: .utf8)
+        else {
+            continuation?.resume(throwing: AuthError.failed("Identity token não disponível."))
+            continuation = nil
             return
         }
 
-        let userID = credential.user
-        let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
-            .compactMap { $0 }
-            .joined(separator: " ")
-
-        let user = AuthenticatedUser(
-            id: userID,
-            name: fullName.isEmpty ? nil : fullName,
-            email: credential.email,
-            provider: .apple
-        )
-
-        continuation?.resume(returning: user)
+        continuation?.resume(returning: identityToken)
         continuation = nil
     }
 
