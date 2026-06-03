@@ -24,7 +24,6 @@ Laboratório de autenticação iOS com múltiplos providers, construído em Swif
 - Xcode 16+
 - iOS 17+ (simulador ou device)
 - Conta Apple Developer (para Sign in with Apple)
-- Credenciais Google configuradas no `GoogleService-Info.plist`
 
 ---
 
@@ -42,7 +41,7 @@ Abra o arquivo `.xcodeproj` diretamente. Não é necessário nenhum passo adicio
 
 ### 3. Configurar Google Sign-In
 
-Copie o arquivo `GoogleService-Info.plist` com as credenciais do projeto para dentro do target antes de rodar.
+O arquivo `GoogleService-Info.plist` contém credenciais sensíveis e não está versionado no repositório. Solicite o arquivo ao responsável pelo projeto e adicione-o dentro do target no Xcode antes de rodar.
 
 ### 4. Rodar
 
