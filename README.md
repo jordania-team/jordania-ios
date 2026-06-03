@@ -1,4 +1,4 @@
-# Auth Playground iOS
+# Auth Playground - iOS
 
 Laboratório de autenticação iOS com múltiplos providers, construido em SwiftUI com mentalidade Apple-first.
 
