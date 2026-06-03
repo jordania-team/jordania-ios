@@ -33,7 +33,7 @@ Laboratório de autenticação iOS com múltiplos providers, construído em Swif
 ### 1. Clonar o repositório
 
 ```bash
-git clone git@github.com:ghabrielferrari/auth-playground-ios.git
+git clone https://github.com/ghabrielferrari/auth-playground-ios.git
 ```
 
 ### 2. Abrir no Xcode
