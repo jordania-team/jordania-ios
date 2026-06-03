@@ -41,8 +41,14 @@ final class BackendAuthService {
     /// - Parameters:
     ///   - provider: O provider OAuth usado (.apple ou .google)
     ///   - identityToken: O JWT emitido pelo provider (Apple: identityToken, Google: idToken)
+    ///   - name: Nome do usuário — obrigatório apenas no primeiro login com Apple,
+    ///           pois a Apple só envia fullName na primeira autorização.
     /// - Returns: AuthSessionResponse com accessToken e dados do usuário
-    func login(provider: AuthProvider, identityToken: String) async throws -> AuthSessionResponse {
+    func login(
+        provider: AuthProvider,
+        identityToken: String,
+        name: String? = nil
+    ) async throws -> AuthSessionResponse {
         let url = URL(string: "\(kBackendBaseURL)/auth/login")!
 
         var request = URLRequest(url: url)
@@ -50,7 +56,7 @@ final class BackendAuthService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 10
 
-        let body = LoginRequest(provider: provider.rawValue, identityToken: identityToken)
+        let body = LoginRequest(provider: provider.rawValue, identityToken: identityToken, name: name)
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -72,4 +78,6 @@ final class BackendAuthService {
 private struct LoginRequest: Encodable {
     let provider: String
     let identityToken: String
+    /// nil é omitido do JSON automaticamente pelo JSONEncoder — o backend trata ausência como string vazia.
+    let name: String?
 }

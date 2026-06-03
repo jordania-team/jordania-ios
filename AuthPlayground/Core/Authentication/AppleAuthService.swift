@@ -21,8 +21,10 @@ final class AppleAuthService: NSObject {
     // MARK: - Private State
 
     private var currentNonce: String?
-    /// Continuation interna carrega apenas o identityToken — o backend resolve o userId canônico.
-    private var continuation: CheckedContinuation<String, Error>?
+
+    /// Carrega identityToken + nome completo do credential.
+    /// A Apple envia fullName apenas na primeira autorização — capturamos aqui e repassamos ao backend.
+    private var continuation: CheckedContinuation<AppleCredential, Error>?
 
     // MARK: - Init
 
@@ -40,8 +42,9 @@ final class AppleAuthService: NSObject {
         request.requestedScopes = [.fullName, .email]
         request.nonce = sha256(nonce)
 
-        // Passo 1: obtém o identityToken da Apple via delegate.
-        let identityToken = try await withCheckedThrowingContinuation { continuation in
+        // Passo 1: obtém identityToken + fullName via delegate.
+        // fullName só vem preenchido na primeira autorização — nas seguintes vem nil.
+        let credential = try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
@@ -49,9 +52,11 @@ final class AppleAuthService: NSObject {
         }
 
         // Passo 2: troca o identityToken pelo JWT do backend.
+        // Passa o nome quando disponível — o backend persiste apenas se o campo estiver presente.
         let session = try await backendAuthService.login(
             provider: .apple,
-            identityToken: identityToken
+            identityToken: credential.identityToken,
+            name: credential.fullName
         )
 
         return AuthenticatedUser(
@@ -110,7 +115,18 @@ extension AppleAuthService: ASAuthorizationControllerDelegate {
             return
         }
 
-        continuation?.resume(returning: identityToken)
+        // Monta o nome completo quando disponível (primeira autorização Apple).
+        // Nas autorizações seguintes, fullName vem nil — o backend mantém o nome já persistido.
+        let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .nilIfEmpty()
+
+        continuation?.resume(returning: AppleCredential(
+            identityToken: identityToken,
+            fullName: fullName
+        ))
         continuation = nil
     }
 
@@ -124,5 +140,23 @@ extension AppleAuthService: ASAuthorizationControllerDelegate {
             continuation?.resume(throwing: AuthError.failed(error.localizedDescription))
         }
         continuation = nil
+    }
+}
+
+// MARK: - Private Types
+
+/// Agrupa os dados relevantes do ASAuthorizationAppleIDCredential.
+/// Evita passar múltiplos valores soltos pela continuation.
+private struct AppleCredential {
+    let identityToken: String
+    let fullName: String?
+}
+
+// MARK: - String Helper
+
+private extension String {
+    /// Retorna nil se a string estiver vazia — evita persistir "" no banco.
+    func nilIfEmpty() -> String? {
+        isEmpty ? nil : self
     }
 }
