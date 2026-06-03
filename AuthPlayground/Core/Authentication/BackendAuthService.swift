@@ -8,15 +8,24 @@
 import Foundation
 
 // TODO: Mover para variável de ambiente ou configuração de build antes de produção.
-private let kBackendBaseURL = "http://localhost:8000"
+private let kBackendBaseURL = "http://localhost:8080"
 
-/// DTO da resposta do endpoint /auth/login.
-/// Agnóstico ao provider — o backend decide o userId canônico.
+/// Resposta do endpoint POST /auth/login.
+/// O backend valida o identityToken do provider e retorna o JWT interno + dados do usuário.
 struct AuthSessionResponse: Decodable {
+    /// JWT do backend Jordania — usado em todas as chamadas autenticadas.
     let accessToken: String
     let userId: String
     let name: String?
     let email: String?
+
+    // O backend retorna o campo como "token", mapeamos para accessToken.
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "token"
+        case userId
+        case name
+        case email
+    }
 }
 
 /// Responsável exclusivamente pela chamada ao backend de autenticação.
@@ -27,6 +36,8 @@ final class BackendAuthService {
     // MARK: - Public API
 
     /// Troca o identityToken do provider por uma sessão autenticada no backend.
+    /// O backend valida a assinatura do token diretamente com Apple/Google antes de responder.
+    ///
     /// - Parameters:
     ///   - provider: O provider OAuth usado (.apple ou .google)
     ///   - identityToken: O JWT emitido pelo provider (Apple: identityToken, Google: idToken)
@@ -52,9 +63,7 @@ final class BackendAuthService {
             throw AuthError.failed("Servidor retornou status \(http.statusCode).")
         }
 
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(AuthSessionResponse.self, from: data)
+        return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
     }
 }
 
