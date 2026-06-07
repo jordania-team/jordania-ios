@@ -26,9 +26,10 @@ final class AppleAuthService {
 
     // MARK: - Nonce
 
-    /// Gera e armazena o nonce atual. Deve ser chamado ao configurar o request.
-    private(set) var currentNonce: String = ""
+    /// Nonce atual. Privado — nenhum caller externo precisa acessar.
+    private var currentNonce: String = ""
 
+    /// Gera e armazena o nonce atual. Retorna o hash SHA-256 para o request da Apple.
     func prepareNonce() -> String {
         let nonce = generateNonce()
         currentNonce = nonce

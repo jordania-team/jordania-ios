@@ -17,10 +17,6 @@ struct AuthView: View {
     @State private var appleAuthService = AppleAuthService()
     @State private var googleAuthService = GoogleAuthService()
 
-    // Nonce hasheado repassado ao request da Apple.
-    // Gerado em onRequest e validado no onCompletion pelo backend.
-    @State private var hashedNonce: String = ""
-
     var body: some View {
         NavigationStack {
             Group {
@@ -63,13 +59,12 @@ struct AuthView: View {
                     ProgressView()
                         .controlSize(.large)
                 } else {
-                    // Apple — botão nativo conforme HIG.
-                    // onRequest: gera o nonce e configura os scopes.
+                    // Botão nativo Apple — HIG compliant.
+                    // onRequest: gera o nonce via prepareNonce() e configura os scopes.
                     // onCompletion: repassa o Result diretamente ao AppleAuthService.
                     SignInWithAppleButton(.signIn) { request in
-                        hashedNonce = appleAuthService.prepareNonce()
                         request.requestedScopes = [.fullName, .email]
-                        request.nonce = hashedNonce
+                        request.nonce = appleAuthService.prepareNonce()
                     } onCompletion: { result in
                         signInWithApple(result: result)
                     }
