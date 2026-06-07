@@ -60,12 +60,25 @@ struct AuthView: View {
                         .controlSize(.large)
                 } else {
                     // Apple
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { _ in }
-                        .signInWithAppleButtonStyle(.black)
+                    // Botão customizado que dispara o AppleAuthService diretamente.
+                    // Evita o conflito entre SignInWithAppleButton(onCompletion:) e onTapGesture
+                    // que causava dois ASAuthorizationController concorrentes, descartando o
+                    // fullName antes de chegar ao backend na primeira autorização.
+                    Button {
+                        signInWithApple()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "apple.logo")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("Entrar com Apple")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .onTapGesture { signInWithApple() }
+                        .background(Color.primary)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
 
                     // Google
                     Button {
