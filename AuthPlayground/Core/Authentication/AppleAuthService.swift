@@ -10,21 +10,13 @@ import CryptoKit
 import Foundation
 
 /// Responsável exclusivamente pelo fluxo de Sign in with Apple.
-/// Obtém o identityToken da Apple, envia ao backend e retorna AuthenticatedUser.
-/// Contrato externo mantido: signIn() -> AuthenticatedUser.
-final class AppleAuthService: NSObject {
+/// Recebe o Result do onCompletion do SignInWithAppleButton,
+/// envia o identityToken ao backend e retorna AuthenticatedUser.
+final class AppleAuthService {
 
     // MARK: - Dependencies
 
     private let backendAuthService: BackendAuthService
-
-    // MARK: - Private State
-
-    private var currentNonce: String?
-
-    /// Carrega identityToken + nome completo do credential.
-    /// A Apple envia fullName apenas na primeira autorização — capturamos aqui e repassamos ao backend.
-    private var continuation: CheckedContinuation<AppleCredential, Error>?
 
     // MARK: - Init
 
@@ -32,40 +24,60 @@ final class AppleAuthService: NSObject {
         self.backendAuthService = backendAuthService
     }
 
-    // MARK: - Public API
+    // MARK: - Nonce
 
-    func signIn() async throws -> AuthenticatedUser {
+    /// Gera e armazena o nonce atual. Deve ser chamado ao configurar o request.
+    private(set) var currentNonce: String = ""
+
+    func prepareNonce() -> String {
         let nonce = generateNonce()
         currentNonce = nonce
+        return sha256(nonce)
+    }
 
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
-        request.nonce = sha256(nonce)
+    // MARK: - Public API
 
-        // Passo 1: obtém identityToken + fullName via delegate.
-        // fullName só vem preenchido na primeira autorização — nas seguintes vem nil.
-        let credential = try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let controller = ASAuthorizationController(authorizationRequests: [request])
-            controller.delegate = self
-            controller.performRequests()
+    /// Processa o resultado do onCompletion do SignInWithAppleButton.
+    /// A Apple entrega fullName apenas na primeira autorização — capturado aqui.
+    func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthenticatedUser {
+        switch result {
+        case .failure(let error):
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                throw AuthError.cancelled
+            }
+            throw AuthError.failed(error.localizedDescription)
+
+        case .success(let authorization):
+            guard
+                let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                let tokenData = credential.identityToken,
+                let identityToken = String(data: tokenData, encoding: .utf8)
+            else {
+                throw AuthError.failed("Identity token não disponível.")
+            }
+
+            // fullName só vem preenchido na primeira autorização.
+            // Nas seguintes vem nil — o backend mantém o nome já persistido.
+            let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+                .nilIfEmpty()
+
+            let session = try await backendAuthService.login(
+                provider: .apple,
+                identityToken: identityToken,
+                name: fullName
+            )
+
+            return AuthenticatedUser(
+                id: session.userId,
+                name: session.name,
+                email: session.email,
+                provider: .apple,
+                accessToken: session.accessToken
+            )
         }
-
-        // Passo 2: troca o identityToken pelo JWT do backend.
-        // Passa o nome quando disponível — o backend persiste apenas se o campo estiver presente.
-        let session = try await backendAuthService.login(
-            provider: .apple,
-            identityToken: credential.identityToken,
-            name: credential.fullName
-        )
-
-        return AuthenticatedUser(
-            id: session.userId,
-            name: session.name,
-            email: session.email,
-            provider: .apple,
-            accessToken: session.accessToken
-        )
     }
 
     // MARK: - Nonce Helpers
@@ -95,61 +107,6 @@ final class AppleAuthService: NSObject {
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
-}
-
-// MARK: - ASAuthorizationControllerDelegate
-
-extension AppleAuthService: ASAuthorizationControllerDelegate {
-
-    func authorizationController(
-        controller: ASAuthorizationController,
-        didCompleteWithAuthorization authorization: ASAuthorization
-    ) {
-        guard
-            let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-            let tokenData = credential.identityToken,
-            let identityToken = String(data: tokenData, encoding: .utf8)
-        else {
-            continuation?.resume(throwing: AuthError.failed("Identity token não disponível."))
-            continuation = nil
-            return
-        }
-
-        // Monta o nome completo quando disponível (primeira autorização Apple).
-        // Nas autorizações seguintes, fullName vem nil — o backend mantém o nome já persistido.
-        let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .nilIfEmpty()
-
-        continuation?.resume(returning: AppleCredential(
-            identityToken: identityToken,
-            fullName: fullName
-        ))
-        continuation = nil
-    }
-
-    func authorizationController(
-        controller: ASAuthorizationController,
-        didCompleteWithError error: Error
-    ) {
-        if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-            continuation?.resume(throwing: AuthError.cancelled)
-        } else {
-            continuation?.resume(throwing: AuthError.failed(error.localizedDescription))
-        }
-        continuation = nil
-    }
-}
-
-// MARK: - Private Types
-
-/// Agrupa os dados relevantes do ASAuthorizationAppleIDCredential.
-/// Evita passar múltiplos valores soltos pela continuation.
-private struct AppleCredential {
-    let identityToken: String
-    let fullName: String?
 }
 
 // MARK: - String Helper

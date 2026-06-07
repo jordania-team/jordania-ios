@@ -17,6 +17,10 @@ struct AuthView: View {
     @State private var appleAuthService = AppleAuthService()
     @State private var googleAuthService = GoogleAuthService()
 
+    // Nonce hasheado repassado ao request da Apple.
+    // Gerado em onRequest e validado no onCompletion pelo backend.
+    @State private var hashedNonce: String = ""
+
     var body: some View {
         NavigationStack {
             Group {
@@ -59,26 +63,18 @@ struct AuthView: View {
                     ProgressView()
                         .controlSize(.large)
                 } else {
-                    // Apple
-                    // Botão customizado que dispara o AppleAuthService diretamente.
-                    // Evita o conflito entre SignInWithAppleButton(onCompletion:) e onTapGesture
-                    // que causava dois ASAuthorizationController concorrentes, descartando o
-                    // fullName antes de chegar ao backend na primeira autorização.
-                    Button {
-                        signInWithApple()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "apple.logo")
-                                .font(.system(size: 18, weight: .medium))
-                            Text("Entrar com Apple")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.primary)
-                        .foregroundStyle(Color(uiColor: .systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    // Apple — botão nativo conforme HIG.
+                    // onRequest: gera o nonce e configura os scopes.
+                    // onCompletion: repassa o Result diretamente ao AppleAuthService.
+                    SignInWithAppleButton(.signIn) { request in
+                        hashedNonce = appleAuthService.prepareNonce()
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = hashedNonce
+                    } onCompletion: { result in
+                        signInWithApple(result: result)
                     }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 50)
 
                     // Google
                     Button {
@@ -174,11 +170,11 @@ struct AuthView: View {
 
     // MARK: - Actions
 
-    private func signInWithApple() {
+    private func signInWithApple(result: Result<ASAuthorization, Error>) {
         session.isLoading = true
         Task {
             do {
-                let user = try await appleAuthService.signIn()
+                let user = try await appleAuthService.handle(result)
                 session.signIn(with: user)
             } catch AuthError.cancelled {
                 session.isLoading = false
