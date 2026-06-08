@@ -22,7 +22,7 @@ enum KeychainService {
         let query: [CFString: Any] = [
             kSecClass:          kSecClassGenericPassword,
             kSecAttrAccount:    key,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked
         ]
 
         let attributes: [CFString: Any] = [kSecValueData: data]
