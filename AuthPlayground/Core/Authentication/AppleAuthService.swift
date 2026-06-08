@@ -9,9 +9,15 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 
+/// Chave Keychain para o fullName pendente de confirmação pelo backend.
+/// A Apple entrega o nome uma única vez — precisamos garantir que ele
+/// sobreviva a falhas de rede entre o onCompletion e a resposta do backend.
+private let kPendingAppleNameKey = "jordania.apple.pendingFullName"
+
 /// Responsável exclusivamente pelo fluxo de Sign in with Apple.
 /// Recebe o Result do onCompletion do SignInWithAppleButton,
-/// envia o identityToken ao backend e retorna AuthenticatedUser.
+/// persiste o fullName no Keychain antes de chamar o backend,
+/// e limpa o dado após confirmação de sucesso.
 final class AppleAuthService {
 
     // MARK: - Dependencies
@@ -26,7 +32,6 @@ final class AppleAuthService {
 
     // MARK: - Nonce
 
-    /// Nonce atual. Privado — nenhum caller externo precisa acessar.
     private var currentNonce: String = ""
 
     /// Gera e armazena o nonce atual. Retorna o hash SHA-256 para o request da Apple.
@@ -39,7 +44,11 @@ final class AppleAuthService {
     // MARK: - Public API
 
     /// Processa o resultado do onCompletion do SignInWithAppleButton.
-    /// A Apple entrega fullName apenas na primeira autorização — capturado aqui.
+    ///
+    /// fullName é entregue pela Apple apenas na primeira autorização.
+    /// Persiste no Keychain antes de chamar o backend — garante que o nome
+    /// sobreviva a falhas de rede (ex: permissão de rede local ainda pendente).
+    /// Após sucesso do backend, remove o dado do Keychain.
     func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthenticatedUser {
         switch result {
         case .failure(let error):
@@ -57,19 +66,22 @@ final class AppleAuthService {
                 throw AuthError.failed("Identity token não disponível.")
             }
 
-            // fullName só vem preenchido na primeira autorização.
-            // Nas seguintes vem nil — o backend mantém o nome já persistido.
-            let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
-                .compactMap { $0 }
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-                .nilIfEmpty()
+            // Apple entregou o nome agora (primeira autorização) — persiste antes de qualquer chamada de rede.
+            if let receivedName = extractFullName(from: credential) {
+                KeychainService.save(receivedName, forKey: kPendingAppleNameKey)
+            }
+
+            // Lê do Keychain — funciona tanto na primeira tentativa quanto em retries.
+            let nameToSend = KeychainService.read(forKey: kPendingAppleNameKey)
 
             let session = try await backendAuthService.login(
                 provider: .apple,
                 identityToken: identityToken,
-                name: fullName
+                name: nameToSend
             )
+
+            // Backend confirmou — dado temporário pode ser removido com segurança.
+            KeychainService.delete(forKey: kPendingAppleNameKey)
 
             return AuthenticatedUser(
                 id: session.userId,
@@ -81,7 +93,15 @@ final class AppleAuthService {
         }
     }
 
-    // MARK: - Nonce Helpers
+    // MARK: - Helpers
+
+    private func extractFullName(from credential: ASAuthorizationAppleIDCredential) -> String? {
+        let name = [credential.fullName?.givenName, credential.fullName?.familyName]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return name.isEmpty ? nil : name
+    }
 
     private func generateNonce(length: Int = 32) -> String {
         let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -107,14 +127,5 @@ final class AppleAuthService {
         let data = Data(input.utf8)
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
-    }
-}
-
-// MARK: - String Helper
-
-private extension String {
-    /// Retorna nil se a string estiver vazia — evita persistir "" no banco.
-    func nilIfEmpty() -> String? {
-        isEmpty ? nil : self
     }
 }
