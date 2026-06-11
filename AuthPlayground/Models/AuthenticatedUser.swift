@@ -8,22 +8,21 @@
 import Foundation
 
 /// Representa o usuário autenticado de forma agnóstica ao provider.
-/// A View e a SessionStore nunca dependem de Apple ou Google diretamente.
+/// `Codable` é necessário para serialização no Keychain via JSONEncoder/JSONDecoder.
 ///
 /// - Note: `accessToken` é o JWT emitido pelo backend Jordania — não o token do provider.
-///   Em produção, este token deve ser armazenado exclusivamente no Keychain.
-struct AuthenticatedUser {
-    let id: String
+///   Armazenado exclusivamente no Keychain.
+struct AuthenticatedUser: Codable {
+    let id: UUID
     let name: String?
     let email: String?
     let provider: AuthProvider
-    /// JWT do backend. Usado em todas as chamadas autenticadas à API.
-    /// TODO: Migrar para Keychain antes de produção.
+    /// JWT do backend. Armazenado exclusivamente no Keychain.
     let accessToken: String
 }
 
-/// RawRepresentable para permitir persistência como String no SwiftData.
-enum AuthProvider: String {
+/// RawRepresentable e Codable para serialização como String.
+enum AuthProvider: String, Codable {
     case apple
     case google
 }

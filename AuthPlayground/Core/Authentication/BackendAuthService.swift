@@ -7,25 +7,13 @@
 
 import Foundation
 
-// TODO: Mover para variável de ambiente ou configuração de build antes de produção.
-private let kBackendBaseURL = "http://localhost:8080"
-
 /// Resposta do endpoint POST /auth/login.
 /// O backend valida o identityToken do provider e retorna o JWT interno + dados do usuário.
 struct AuthSessionResponse: Decodable {
-    /// JWT do backend Jordania — usado em todas as chamadas autenticadas.
-    let accessToken: String
-    let userId: String
+    let token: String
+    let userId: UUID
     let name: String?
     let email: String?
-
-    // O backend retorna o campo como "token", mapeamos para accessToken.
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "token"
-        case userId
-        case name
-        case email
-    }
 }
 
 /// Responsável exclusivamente pela chamada ao backend de autenticação.
@@ -36,27 +24,33 @@ final class BackendAuthService {
     // MARK: - Public API
 
     /// Troca o identityToken do provider por uma sessão autenticada no backend.
-    /// O backend valida a assinatura do token diretamente com Apple/Google antes de responder.
     ///
     /// - Parameters:
     ///   - provider: O provider OAuth usado (.apple ou .google)
     ///   - identityToken: O JWT emitido pelo provider (Apple: identityToken, Google: idToken)
-    ///   - name: Nome do usuário — obrigatório apenas no primeiro login com Apple,
-    ///           pois a Apple só envia fullName na primeira autorização.
-    /// - Returns: AuthSessionResponse com accessToken e dados do usuário
+    ///   - name: Nome do usuário — obrigatório apenas no primeiro login com Apple
+    ///   - rawNonce: Nonce original (pré-SHA256) — obrigatório para Apple, nil para Google
     func login(
         provider: AuthProvider,
         identityToken: String,
-        name: String? = nil
+        name: String? = nil,
+        rawNonce: String? = nil
     ) async throws -> AuthSessionResponse {
-        let url = URL(string: "\(kBackendBaseURL)/auth/login")!
+        let url = AppConfiguration.apiBaseURL
+            .appendingPathComponent("auth")
+            .appendingPathComponent("login")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
+        request.timeoutInterval = 15
 
-        let body = LoginRequest(provider: provider.rawValue, identityToken: identityToken, name: name)
+        let body = LoginRequest(
+            provider: provider.rawValue,
+            identityToken: identityToken,
+            name: name,
+            rawNonce: rawNonce
+        )
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -66,7 +60,9 @@ final class BackendAuthService {
         }
 
         guard http.statusCode == 200 else {
-            throw AuthError.failed("Servidor retornou status \(http.statusCode).")
+            let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
+                ?? "Falha ao autenticar. Código: \(http.statusCode)."
+            throw AuthError.failed(message)
         }
 
         return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
@@ -78,6 +74,8 @@ final class BackendAuthService {
 private struct LoginRequest: Encodable {
     let provider: String
     let identityToken: String
-    /// nil é omitido do JSON automaticamente pelo JSONEncoder — o backend trata ausência como string vazia.
+    /// nil é omitido do JSON automaticamente — o backend trata ausência como string vazia.
     let name: String?
+    /// Nonce original (pré-SHA256). Obrigatório para Apple Sign In.
+    let rawNonce: String?
 }

@@ -9,14 +9,14 @@ import Foundation
 import Observation
 
 /// Fonte única de verdade do estado de autenticação.
-/// Delega persistência para SessionPersistence — não conhece SwiftData diretamente.
+/// Delega persistência para SessionPersistence — não conhece Keychain ou SwiftData diretamente.
 @Observable
 @MainActor
 final class SessionStore {
 
     // MARK: - State
 
-    var currentUser: AuthenticatedUser?
+    private(set) var currentUser: AuthenticatedUser?
     var isLoading: Bool = false
     var authError: AuthError?
 
@@ -41,9 +41,13 @@ final class SessionStore {
 
     func signIn(with user: AuthenticatedUser) {
         isLoading = false
-        currentUser = user
         authError = nil
-        persistence?.save(user)
+        do {
+            try persistence?.save(user)
+            currentUser = user
+        } catch {
+            authError = .failed("Não foi possível salvar a sessão com segurança.")
+        }
     }
 
     func signOut() {

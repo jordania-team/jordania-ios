@@ -11,7 +11,7 @@ import Foundation
 
 /// Responsável exclusivamente pelo fluxo de Sign in with Apple.
 /// Recebe o Result do onCompletion do SignInWithAppleButton,
-/// envia o identityToken ao backend e retorna AuthenticatedUser.
+/// envia o identityToken + rawNonce ao backend e retorna AuthenticatedUser.
 final class AppleAuthService {
 
     // MARK: - Dependencies
@@ -26,10 +26,13 @@ final class AppleAuthService {
 
     // MARK: - Nonce
 
-    /// Nonce atual. Privado — nenhum caller externo precisa acessar.
+    /// Nonce raw atual — armazenado para ser enviado ao backend após autenticação.
+    /// Privado: nenhum caller externo precisa acessar.
     private var currentNonce: String = ""
 
-    /// Gera e armazena o nonce atual. Retorna o hash SHA-256 para o request da Apple.
+    /// Gera e armazena o nonce atual.
+    /// Retorna o hash SHA-256 para ser passado ao request da Apple (requestedNonce).
+    /// O nonce raw é mantido internamente para envio ao backend.
     func prepareNonce() -> String {
         let nonce = generateNonce()
         currentNonce = nonce
@@ -65,10 +68,13 @@ final class AppleAuthService {
                 .joined(separator: " ")
                 .nilIfEmpty()
 
+            // rawNonce é enviado ao backend para validação do nonce embutido no token Apple.
+            // O backend compara SHA256(rawNonce) com o claim "nonce" do JWT da Apple.
             let session = try await backendAuthService.login(
                 provider: .apple,
                 identityToken: identityToken,
-                name: fullName
+                name: fullName,
+                rawNonce: currentNonce.isEmpty ? nil : currentNonce
             )
 
             return AuthenticatedUser(
@@ -76,7 +82,7 @@ final class AppleAuthService {
                 name: session.name,
                 email: session.email,
                 provider: .apple,
-                accessToken: session.accessToken
+                accessToken: session.token
             )
         }
     }

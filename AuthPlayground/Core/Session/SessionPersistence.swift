@@ -6,48 +6,33 @@
 //
 
 import Foundation
-import SwiftData
 
-/// Responsável exclusivamente por ler e escrever a sessão no SwiftData.
-/// A SessionStore delega persistência para cá, sem conhecer SwiftData diretamente.
+/// Responsável exclusivamente por ler e escrever a sessão via Keychain.
+/// A SessionStore delega persistência para cá, sem conhecer Security framework diretamente.
+/// SwiftData foi removido — tokens JWT nunca devem ser persistidos em banco de dados local.
 @MainActor
 final class SessionPersistence {
 
-    private let modelContext: ModelContext
+    private let keychain: KeychainService
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    init(keychain: KeychainService = KeychainService()) {
+        self.keychain = keychain
     }
 
     // MARK: - Public API
 
-    /// Retorna a sessão persistida, se existir.
+    /// Retorna a sessão persistida no Keychain, se existir.
     func loadSession() -> AuthenticatedUser? {
-        let descriptor = FetchDescriptor<CachedSession>()
-        let results = (try? modelContext.fetch(descriptor)) ?? []
-        return results.first?.toAuthenticatedUser()
+        keychain.load()
     }
 
-    /// Persiste a sessão do usuário autenticado.
-    /// Apaga qualquer sessão anterior antes de salvar.
-    func save(_ user: AuthenticatedUser) {
-        clearAll()
-        let session = CachedSession(
-            userID: user.id,
-            name: user.name,
-            email: user.email,
-            provider: user.provider,
-            accessToken: user.accessToken
-        )
-        modelContext.insert(session)
-        try? modelContext.save()
+    /// Persiste a sessão do usuário autenticado no Keychain.
+    func save(_ user: AuthenticatedUser) throws {
+        try keychain.save(user)
     }
 
-    /// Apaga a sessão persistida.
+    /// Remove a sessão do Keychain.
     func clearAll() {
-        let descriptor = FetchDescriptor<CachedSession>()
-        let results = (try? modelContext.fetch(descriptor)) ?? []
-        results.forEach { modelContext.delete($0) }
-        try? modelContext.save()
+        keychain.clear()
     }
 }
