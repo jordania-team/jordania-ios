@@ -36,7 +36,7 @@ struct AuthPlaygroundApp: App {
             let plist = NSDictionary(contentsOfFile: path),
             let clientID = plist["CLIENT_ID"] as? String
         else {
-            assertionFailure("GoogleSignIn-Info.plist n\u00e3o encontrado ou CLIENT_ID ausente.")
+            assertionFailure("GoogleSignIn-Info.plist nao encontrado ou CLIENT_ID ausente.")
             return
         }
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
