@@ -6,24 +6,16 @@
 //
 
 import SwiftUI
-import SwiftData
 import GoogleSignIn
 
 @main
 struct AuthPlaygroundApp: App {
 
-    private let container: ModelContainer
     private let sessionStore: SessionStore
 
     init() {
-        // Função estática para evitar uso de self antes da inicialização completa
         Self.configurarGoogleSignIn()
-
-        let container = try! ModelContainer(for: CachedSession.self)
-        self.container = container
-
-        let persistence = SessionPersistence(modelContext: container.mainContext)
-        self.sessionStore = SessionStore(persistence: persistence)
+        self.sessionStore = SessionStore(persistence: SessionPersistence())
     }
 
     var body: some Scene {
@@ -34,7 +26,6 @@ struct AuthPlaygroundApp: App {
                     GIDSignIn.sharedInstance.handle(url)
                 }
         }
-        .modelContainer(container)
     }
 
     // MARK: - Private
@@ -45,7 +36,7 @@ struct AuthPlaygroundApp: App {
             let plist = NSDictionary(contentsOfFile: path),
             let clientID = plist["CLIENT_ID"] as? String
         else {
-            assertionFailure("GoogleSignIn-Info.plist não encontrado ou CLIENT_ID ausente.")
+            assertionFailure("GoogleSignIn-Info.plist n\u00e3o encontrado ou CLIENT_ID ausente.")
             return
         }
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
