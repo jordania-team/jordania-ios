@@ -9,9 +9,16 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 
-/// Responsável exclusivamente pelo fluxo de Sign in with Apple.
+/// Chave Keychain para o fullName pendente de confirmacao pelo backend.
+/// A Apple entrega o nome uma unica vez — precisamos garantir que ele
+/// sobreviva a falhas de rede entre o onCompletion e a resposta do backend
+/// (ex: alerta de permissao de rede local ainda nao aceito na primeira execucao).
+private let kPendingAppleNameKey = "jordania.apple.pendingFullName"
+
+/// Responsavel exclusivamente pelo fluxo de Sign in with Apple.
 /// Recebe o Result do onCompletion do SignInWithAppleButton,
-/// envia o identityToken + rawNonce ao backend e retorna AuthenticatedUser.
+/// persiste o fullName no Keychain antes de chamar o backend,
+/// e limpa o dado apos confirmacao de sucesso.
 final class AppleAuthService {
 
     // MARK: - Dependencies
@@ -26,13 +33,9 @@ final class AppleAuthService {
 
     // MARK: - Nonce
 
-    /// Nonce raw atual — armazenado para ser enviado ao backend após autenticação.
-    /// Privado: nenhum caller externo precisa acessar.
     private var currentNonce: String = ""
 
-    /// Gera e armazena o nonce atual.
-    /// Retorna o hash SHA-256 para ser passado ao request da Apple (requestedNonce).
-    /// O nonce raw é mantido internamente para envio ao backend.
+    /// Gera e armazena o nonce atual. Retorna o hash SHA-256 para o request da Apple.
     func prepareNonce() -> String {
         let nonce = generateNonce()
         currentNonce = nonce
@@ -42,7 +45,11 @@ final class AppleAuthService {
     // MARK: - Public API
 
     /// Processa o resultado do onCompletion do SignInWithAppleButton.
-    /// A Apple entrega fullName apenas na primeira autorização — capturado aqui.
+    ///
+    /// fullName e entregue pela Apple apenas na primeira autorizacao.
+    /// Persiste no Keychain antes de chamar o backend — garante que o nome
+    /// sobreviva a falhas de rede (ex: permissao de rede local ainda pendente).
+    /// Apos sucesso do backend, remove o dado do Keychain.
     func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthenticatedUser {
         switch result {
         case .failure(let error):
@@ -57,25 +64,26 @@ final class AppleAuthService {
                 let tokenData = credential.identityToken,
                 let identityToken = String(data: tokenData, encoding: .utf8)
             else {
-                throw AuthError.failed("Identity token não disponível.")
+                throw AuthError.failed("Identity token nao disponivel.")
             }
 
-            // fullName só vem preenchido na primeira autorização.
-            // Nas seguintes vem nil — o backend mantém o nome já persistido.
-            let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
-                .compactMap { $0 }
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-                .nilIfEmpty()
+            // Apple entregou o nome agora (primeira autorizacao) — persiste antes de qualquer chamada de rede.
+            if let receivedName = extractFullName(from: credential) {
+                KeychainService.save(receivedName, forKey: kPendingAppleNameKey)
+            }
 
-            // rawNonce é enviado ao backend para validação do nonce embutido no token Apple.
-            // O backend compara SHA256(rawNonce) com o claim "nonce" do JWT da Apple.
+            // Le do Keychain — funciona tanto na primeira tentativa quanto em retries.
+            let nameToSend = KeychainService.read(forKey: kPendingAppleNameKey)
+
             let session = try await backendAuthService.login(
                 provider: .apple,
                 identityToken: identityToken,
-                name: fullName,
+                name: nameToSend,
                 rawNonce: currentNonce.isEmpty ? nil : currentNonce
             )
+
+            // Backend confirmou — dado temporario pode ser removido com seguranca.
+            KeychainService.delete(forKey: kPendingAppleNameKey)
 
             return AuthenticatedUser(
                 id: session.userId,
@@ -87,7 +95,15 @@ final class AppleAuthService {
         }
     }
 
-    // MARK: - Nonce Helpers
+    // MARK: - Helpers
+
+    private func extractFullName(from credential: ASAuthorizationAppleIDCredential) -> String? {
+        let name = [credential.fullName?.givenName, credential.fullName?.familyName]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return name.isEmpty ? nil : name
+    }
 
     private func generateNonce(length: Int = 32) -> String {
         let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -113,14 +129,5 @@ final class AppleAuthService {
         let data = Data(input.utf8)
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
-    }
-}
-
-// MARK: - String Helper
-
-private extension String {
-    /// Retorna nil se a string estiver vazia — evita persistir "" no banco.
-    func nilIfEmpty() -> String? {
-        isEmpty ? nil : self
     }
 }
