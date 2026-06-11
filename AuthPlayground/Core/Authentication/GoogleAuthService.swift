@@ -8,9 +8,8 @@
 import GoogleSignIn
 import UIKit
 
-/// Responsável exclusivamente pelo fluxo de Sign in with Google.
-/// Obtém o idToken do Google, envia ao backend e retorna AuthenticatedUser.
-/// Contrato externo mantido: signIn() -> AuthenticatedUser.
+/// Responsavel exclusivamente pelo fluxo de Sign in with Google.
+/// Obtem o idToken do Google, envia ao backend e retorna AuthenticatedUser.
 final class GoogleAuthService {
 
     // MARK: - Dependencies
@@ -27,18 +26,16 @@ final class GoogleAuthService {
 
     func signIn() async throws -> AuthenticatedUser {
         guard let rootViewController = await rootViewController() else {
-            throw AuthError.failed("Não foi possível obter a view controller raiz.")
+            throw AuthError.failed("Nao foi possivel obter a view controller raiz.")
         }
 
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
         let googleUser = result.user
 
-        // Passo 1: obtém o idToken do Google.
         guard let idToken = googleUser.idToken?.tokenString else {
-            throw AuthError.failed("ID Token do Google não disponível.")
+            throw AuthError.failed("ID Token do Google nao disponivel.")
         }
 
-        // Passo 2: troca o idToken pelo JWT do backend.
         let session = try await backendAuthService.login(
             provider: .google,
             identityToken: idToken
@@ -49,7 +46,7 @@ final class GoogleAuthService {
             name: session.name,
             email: session.email,
             provider: .google,
-            accessToken: session.accessToken
+            accessToken: session.token
         )
     }
 
@@ -67,7 +64,7 @@ final class GoogleAuthService {
                 name: session.name,
                 email: session.email,
                 provider: .google,
-                accessToken: session.accessToken
+                accessToken: session.token
             )
         } catch {
             return nil
