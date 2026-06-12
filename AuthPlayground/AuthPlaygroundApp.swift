@@ -20,8 +20,7 @@ struct AuthPlaygroundApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AuthView()
-                .environment(sessionStore)
+            RootView(sessionStore: sessionStore)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }
