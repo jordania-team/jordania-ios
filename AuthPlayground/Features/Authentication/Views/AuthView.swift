@@ -11,8 +11,7 @@ import SwiftUI
 /// Tela de autenticação. Layout e apresentação apenas —
 /// toda orquestração vive no AuthViewModel.
 struct AuthView: View {
-    
-    @Environment(\.colorScheme) private var colorScheme
+
     @Environment(SessionStore.self) private var session
     @State private var viewModel: AuthViewModel
 
@@ -49,12 +48,11 @@ struct AuthView: View {
                         .controlSize(.large)
                         .frame(height: 50)
                 } else {
-                    SignInWithAppleButton(.signIn) { request in
+                    AppleSignInButton { request in
                         viewModel.prepareAppleRequest(request)
                     } onCompletion: { result in
                         viewModel.handleAppleSignIn(result)
                     }
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                     .frame(height: 50)
 
                     googleSignInButton
@@ -75,8 +73,6 @@ struct AuthView: View {
 
     // MARK: - Google Button
 
-    /// Botão Google seguindo as Brand Guidelines do Google:
-    /// fundo branco, logo SVG oficial, texto "Continuar com Google".
     private var googleSignInButton: some View {
         Button {
             viewModel.signInWithGoogle()
@@ -86,6 +82,23 @@ struct AuthView: View {
                 .scaledToFit()
                 .frame(height: 50)
         }
+    }
+}
+
+// MARK: - Apple Sign In Button
+
+/// Subview isolada para que @Environment(\.colorScheme) reaja
+/// corretamente a mudanças de tema em tempo real.
+private struct AppleSignInButton: View {
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    let onRequest: (ASAuthorizationAppleIDRequest) -> Void
+    let onCompletion: (Result<ASAuthorization, Error>) -> Void
+
+    var body: some View {
+        SignInWithAppleButton(.signIn, onRequest: onRequest, onCompletion: onCompletion)
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
     }
 }
 
