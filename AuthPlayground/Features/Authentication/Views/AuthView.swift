@@ -5,17 +5,19 @@
 //  Created by Gabriel Ferrari on 31/05/26.
 //
 
-import SwiftUI
 import AuthenticationServices
+import SwiftUI
 
-/// Tela principal de autenticação.
-/// Responsável apenas por refletir o estado da SessionStore e disparar ações.
-/// Nenhuma lógica de negócio aqui.
+/// Tela principal de autenticação. Layout e apresentação apenas —
+/// toda orquestração vive no AuthViewModel.
 struct AuthView: View {
 
     @Environment(SessionStore.self) private var session
-    @State private var appleAuthService = AppleAuthService()
-    @State private var googleAuthService = GoogleAuthService()
+    @State private var viewModel: AuthViewModel
+
+    init(session: SessionStore) {
+        _viewModel = State(initialValue: AuthViewModel(session: session))
+    }
 
     var body: some View {
         NavigationStack {
@@ -59,21 +61,16 @@ struct AuthView: View {
                     ProgressView()
                         .controlSize(.large)
                 } else {
-                    // Botão nativo Apple — HIG compliant.
-                    // onRequest: gera o nonce via prepareNonce() e configura os scopes.
-                    // onCompletion: repassa o Result diretamente ao AppleAuthService.
                     SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                        request.nonce = appleAuthService.prepareNonce()
+                        viewModel.prepareAppleRequest(request)
                     } onCompletion: { result in
-                        signInWithApple(result: result)
+                        viewModel.handleAppleSignIn(result)
                     }
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
 
-                    // Google
                     Button {
-                        signInWithGoogle()
+                        viewModel.signInWithGoogle()
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "globe")
@@ -131,27 +128,29 @@ struct AuthView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text("Provider: \(session.currentUser?.provider == .apple ? "Apple" : "Google")")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
+                if let provider = session.currentUser?.provider {
+                    Text("Provider: \(provider.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 4)
+                }
 
-                // DEBUG: exibe o accessToken truncado para validar a spike.
-                // TODO: Remover antes de produção.
+                #if DEBUG
+                // Validação visual da spike — impossível compilar em Release.
                 if let token = session.currentUser?.accessToken {
-                    let preview = String(token.prefix(24)) + "…"
-                    Text("JWT: \(preview)")
+                    Text("JWT: \(String(token.prefix(24)))…")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .monospaced()
                         .padding(.top, 2)
                 }
+                #endif
             }
 
             Spacer()
 
             Button(role: .destructive) {
-                signOut()
+                viewModel.signOut()
             } label: {
                 Text("Sair")
                     .frame(maxWidth: .infinity)
@@ -162,46 +161,10 @@ struct AuthView: View {
             .padding(.bottom, 40)
         }
     }
-
-    // MARK: - Actions
-
-    private func signInWithApple(result: Result<ASAuthorization, Error>) {
-        session.isLoading = true
-        Task {
-            do {
-                let user = try await appleAuthService.handle(result)
-                session.signIn(with: user)
-            } catch AuthError.cancelled {
-                session.isLoading = false
-            } catch {
-                session.setError(.failed(error.localizedDescription))
-            }
-        }
-    }
-
-    private func signInWithGoogle() {
-        session.isLoading = true
-        Task {
-            do {
-                let user = try await googleAuthService.signIn()
-                session.signIn(with: user)
-            } catch AuthError.cancelled {
-                session.isLoading = false
-            } catch {
-                session.setError(.failed(error.localizedDescription))
-            }
-        }
-    }
-
-    private func signOut() {
-        if session.currentUser?.provider == .google {
-            googleAuthService.signOut()
-        }
-        session.signOut()
-    }
 }
 
 #Preview {
-    AuthView()
-        .environment(SessionStore())
+    let session = SessionStore()
+    AuthView(session: session)
+        .environment(session)
 }

@@ -9,7 +9,6 @@ import Foundation
 
 /// Responsável exclusivamente por ler e escrever a sessão via Keychain.
 /// A SessionStore delega persistência para cá, sem conhecer Security framework diretamente.
-/// SwiftData foi removido — tokens JWT nunca devem ser persistidos em banco de dados local.
 @MainActor
 final class SessionPersistence {
 
@@ -21,9 +20,15 @@ final class SessionPersistence {
 
     // MARK: - Public API
 
-    /// Retorna a sessão persistida no Keychain, se existir.
+    /// Retorna a sessão persistida, se existir e o token ainda for válido.
+    /// Sessão expirada é removida do Keychain — o usuário fará login novamente.
     func loadSession() -> AuthenticatedUser? {
-        keychain.load()
+        guard let user = keychain.load() else { return nil }
+        guard !JWT.isExpired(user.accessToken) else {
+            try? keychain.clear()
+            return nil
+        }
+        return user
     }
 
     /// Persiste a sessão do usuário autenticado no Keychain.
@@ -32,7 +37,7 @@ final class SessionPersistence {
     }
 
     /// Remove a sessão do Keychain.
-    func clearAll() {
-        keychain.clear()
+    func clearAll() throws {
+        try keychain.clear()
     }
 }

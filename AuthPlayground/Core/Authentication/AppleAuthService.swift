@@ -9,52 +9,69 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 
-/// Chave UserDefaults para o fullName pendente de confirmacao pelo backend.
-/// A Apple entrega o nome uma unica vez — precisamos garantir que ele
-/// sobreviva a falhas de rede entre o onCompletion e a resposta do backend
-/// (ex: alerta de permissao de rede local ainda nao aceito na primeira execucao).
-/// Nao e dado sensivel — UserDefaults e suficiente para esta finalidade temporaria.
-private let kPendingAppleNameKey = "jordania.apple.pendingFullName"
+/// Nome pendente de confirmacao pelo backend, vinculado ao usuario Apple que o originou.
+/// A Apple entrega o fullName uma unica vez — ele precisa sobreviver a falhas de rede
+/// entre o onCompletion e a resposta do backend (ex: alerta de permissao de rede local
+/// ainda nao aceito na primeira execucao). Vinculado ao credential.user para nunca
+/// enviar o nome de um usuario na conta de outro. Nao e dado sensivel — UserDefaults
+/// e suficiente para esta finalidade temporaria.
+private struct PendingAppleName: Codable {
+    let userID: String
+    let name: String
+
+    static let storageKey = "jordania.apple.pendingFullName"
+
+    static func load(for userID: String) -> String? {
+        guard
+            let data = UserDefaults.standard.data(forKey: storageKey),
+            let pending = try? JSONDecoder().decode(PendingAppleName.self, from: data),
+            pending.userID == userID
+        else { return nil }
+        return pending.name
+    }
+
+    static func save(_ name: String, for userID: String) {
+        let pending = PendingAppleName(userID: userID, name: name)
+        guard let data = try? JSONEncoder().encode(pending) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+}
 
 /// Responsavel exclusivamente pelo fluxo de Sign in with Apple.
+/// @MainActor: o fluxo nasce na UI e a classe tem estado mutavel (currentNonce).
+@MainActor
 final class AppleAuthService {
-
-    // MARK: - Dependencies
 
     private let backendAuthService: BackendAuthService
 
-    // MARK: - Init
+    private var currentNonce: String?
 
     init(backendAuthService: BackendAuthService = BackendAuthService()) {
         self.backendAuthService = backendAuthService
     }
 
-    // MARK: - Nonce
-
-    private var currentNonce: String = ""
+    // MARK: - Public API
 
     /// Gera e armazena o nonce atual. Retorna o hash SHA-256 para o request da Apple.
+    /// Deve ser chamado no onRequest do SignInWithAppleButton, antes de cada tentativa.
     func prepareNonce() -> String {
         let nonce = generateNonce()
         currentNonce = nonce
         return sha256(nonce)
     }
 
-    // MARK: - Public API
-
     /// Processa o resultado do onCompletion do SignInWithAppleButton.
-    ///
-    /// fullName e entregue pela Apple apenas na primeira autorizacao.
-    /// Persiste em UserDefaults antes de chamar o backend — garante que o nome
-    /// sobreviva a falhas de rede (ex: permissao de rede local ainda pendente).
-    /// Apos sucesso do backend, remove o dado.
     func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthenticatedUser {
+        // Nonce e one-time: consome e limpa, em sucesso ou falha.
+        defer { currentNonce = nil }
+
         switch result {
         case .failure(let error):
-            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-                throw AuthError.cancelled
-            }
-            throw AuthError.failed(error.localizedDescription)
+            throw mapAuthorizationError(error)
 
         case .success(let authorization):
             guard
@@ -62,26 +79,26 @@ final class AppleAuthService {
                 let tokenData = credential.identityToken,
                 let identityToken = String(data: tokenData, encoding: .utf8)
             else {
-                throw AuthError.failed("Identity token nao disponivel.")
+                throw AuthError.failed("Não foi possível concluir o login com a Apple.")
             }
 
-            // Apple entregou o nome agora (primeira autorizacao) — persiste antes de qualquer chamada de rede.
+            // Nonce ausente = prepareNonce() nao foi chamado no onRequest (wiring da View).
+            guard let rawNonce = currentNonce else {
+                throw AuthError.failed("Fluxo de autenticação inválido. Tente novamente.")
+            }
+
             if let receivedName = extractFullName(from: credential) {
-                UserDefaults.standard.set(receivedName, forKey: kPendingAppleNameKey)
+                PendingAppleName.save(receivedName, for: credential.user)
             }
-
-            // Le do UserDefaults — funciona tanto na primeira tentativa quanto em retries.
-            let nameToSend = UserDefaults.standard.string(forKey: kPendingAppleNameKey)
 
             let session = try await backendAuthService.login(
                 provider: .apple,
                 identityToken: identityToken,
-                name: nameToSend,
-                rawNonce: currentNonce.isEmpty ? nil : currentNonce
+                name: PendingAppleName.load(for: credential.user),
+                rawNonce: rawNonce
             )
 
-            // Backend confirmou — dado temporario pode ser removido com seguranca.
-            UserDefaults.standard.removeObject(forKey: kPendingAppleNameKey)
+            PendingAppleName.clear()
 
             return AuthenticatedUser(
                 id: session.userId,
@@ -95,6 +112,22 @@ final class AppleAuthService {
 
     // MARK: - Helpers
 
+    /// Mapeia erros do AuthenticationServices para erros de dominio.
+    /// Nunca expoe localizedDescription do sistema na UI.
+    private func mapAuthorizationError(_ error: Error) -> AuthError {
+        guard let authError = error as? ASAuthorizationError else {
+            return .failed("Não foi possível concluir o login com a Apple.")
+        }
+        switch authError.code {
+        case .canceled:
+            return .cancelled
+        case .notInteractive, .notHandled:
+            return .failed("O login com a Apple não está disponível no momento.")
+        default:
+            return .failed("Não foi possível concluir o login com a Apple. Tente novamente.")
+        }
+    }
+
     private func extractFullName(from credential: ASAuthorizationAppleIDCredential) -> String? {
         let name = [credential.fullName?.givenName, credential.fullName?.familyName]
             .compactMap { $0 }
@@ -103,24 +136,11 @@ final class AppleAuthService {
         return name.isEmpty ? nil : name
     }
 
+    /// SystemRandomNumberGenerator e criptograficamente seguro em plataformas Apple —
+    /// nao trocar por SecRandomCopyBytes manual.
     private func generateNonce(length: Int = 32) -> String {
-        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        var result = ""
-        var remainingLength = length
-
-        while remainingLength > 0 {
-            var randoms = [UInt8](repeating: 0, count: 16)
-            let status = SecRandomCopyBytes(Security.kSecRandomDefault, randoms.count, &randoms)
-            guard status == errSecSuccess else { continue }
-            randoms.forEach { random in
-                if remainingLength == 0 { return }
-                if random < charset.count {
-                    result.append(charset[Int(random)])
-                    remainingLength -= 1
-                }
-            }
-        }
-        return result
+        let charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._"
+        return String((0..<length).map { _ in charset.randomElement()! })
     }
 
     private func sha256(_ input: String) -> String {

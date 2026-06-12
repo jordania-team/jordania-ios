@@ -7,12 +7,15 @@
 
 import Foundation
 import Observation
+import OSLog
 
 /// Fonte única de verdade do estado de autenticação.
-/// Delega persistência para SessionPersistence — não conhece Keychain ou SwiftData diretamente.
+/// Delega persistência para SessionPersistence — não conhece Keychain diretamente.
 @Observable
 @MainActor
 final class SessionStore {
+
+    private static let logger = Logger(subsystem: "app.jordania", category: "Session")
 
     // MARK: - State
 
@@ -22,14 +25,20 @@ final class SessionStore {
 
     // MARK: - Dependencies
 
-    private let persistence: SessionPersistence?
+    /// Não-opcional por design: esquecer a persistência não pode compilar como no-op
+    /// silencioso. Para testes/previews, injete um SessionPersistence com Keychain fake.
+    private let persistence: SessionPersistence
 
     // MARK: - Init
 
+    /// Parâmetro opcional apenas para contornar a avaliação nonisolated de default
+    /// arguments — a propriedade é non-optional e sempre recebe uma instância real.
     init(persistence: SessionPersistence? = nil) {
+        let persistence = persistence ?? SessionPersistence()
         self.persistence = persistence
-        self.currentUser = persistence?.loadSession()
+        self.currentUser = persistence.loadSession()
     }
+
 
     // MARK: - Computed
 
@@ -43,38 +52,28 @@ final class SessionStore {
         isLoading = false
         authError = nil
         do {
-            try persistence?.save(user)
+            try persistence.save(user)
             currentUser = user
         } catch {
             authError = .failed("Não foi possível salvar a sessão com segurança.")
         }
     }
 
+    /// A UI sempre desloga, mesmo se a limpeza do Keychain falhar — o usuário nunca
+    /// fica preso numa sessão. A falha é logada como evento de segurança.
     func signOut() {
         isLoading = false
         currentUser = nil
         authError = nil
-        persistence?.clearAll()
+        do {
+            try persistence.clearAll()
+        } catch {
+            Self.logger.fault("Logout: falha ao limpar o Keychain — token pode ter persistido.")
+        }
     }
 
     func setError(_ error: AuthError) {
         isLoading = false
         authError = error
-    }
-}
-
-// MARK: - AuthError
-
-enum AuthError: LocalizedError {
-    case cancelled
-    case failed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .cancelled:
-            return nil
-        case .failed(let message):
-            return message
-        }
     }
 }

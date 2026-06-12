@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 
 /// Resposta do endpoint POST /auth/login.
 /// O backend valida o identityToken do provider e retorna o JWT interno + dados do usuário.
@@ -19,7 +20,12 @@ struct AuthSessionResponse: Decodable {
 /// Responsável exclusivamente pela chamada ao backend de autenticação.
 /// Recebe o identityToken do provider (Apple/Google) e retorna a sessão do backend.
 /// Não conhece SessionStore, View ou qualquer outro layer.
-final class BackendAuthService {
+///
+/// Fronteira de erros: transporte/protocolo lança NetworkError (Core/Networking);
+/// rejeição de credenciais lança AuthError (domínio).
+struct BackendAuthService {
+
+    private static let logger = Logger(subsystem: "app.jordania", category: "BackendAuth")
 
     // MARK: - Public API
 
@@ -51,21 +57,55 @@ final class BackendAuthService {
             name: name,
             rawNonce: rawNonce
         )
-        request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            Self.logger.error("Falha ao codificar LoginRequest: \(error)")
+            throw NetworkError.encodingError
+        }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let urlError as URLError {
+            Self.logger.error("Erro de transporte no login: \(urlError)")
+            throw NetworkError(from: urlError)
+        }
 
         guard let http = response as? HTTPURLResponse else {
-            throw AuthError.failed("Resposta inválida do servidor.")
+            throw NetworkError.invalidResponse
         }
 
-        guard http.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
-                ?? "Falha ao autenticar. Código: \(http.statusCode)."
-            throw AuthError.failed(message)
+        guard (200...299).contains(http.statusCode) else {
+            throw mapHTTPError(status: http.statusCode, data: data)
         }
 
-        return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
+        do {
+            return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
+        } catch {
+            Self.logger.error("Falha ao decodificar AuthSessionResponse: \(error)")
+            throw NetworkError.decodingError
+        }
+    }
+
+    // MARK: - Error Mapping
+
+    /// 4xx de credencial vira AuthError (domínio); o resto vira NetworkError (protocolo).
+    /// O corpo de erro do Spring vai para o log, nunca para a UI.
+    private func mapHTTPError(status: Int, data: Data) -> Error {
+        let detail = String(data: data, encoding: .utf8) ?? "<corpo vazio>"
+        Self.logger.error("Login falhou com status \(status): \(detail, privacy: .private)")
+
+        switch status {
+        case 401, 403:
+            return AuthError.failed("Não foi possível validar suas credenciais. Tente novamente.")
+        case 400, 422:
+            return AuthError.failed("Dados de login inválidos. Tente novamente.")
+        default:
+            return NetworkError.serverError(statusCode: status)
+        }
     }
 }
 
