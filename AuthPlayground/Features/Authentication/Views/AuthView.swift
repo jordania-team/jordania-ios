@@ -26,8 +26,8 @@ struct AuthView: View {
             // MARK: - Hero
             VStack(spacing: 16) {
                 Image(systemName: "pawprint.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.indigo)
+                    .font(.system(size: 72))
+                    .foregroundStyle(BrandColors.primary)
 
                 Text("iPet")
                     .font(.largeTitle)
@@ -40,20 +40,20 @@ struct AuthView: View {
             }
 
             Spacer()
-
-            // MARK: - Auth Buttons
+        }
+        .safeAreaInset(edge: .bottom) {
             VStack(spacing: 12) {
                 if session.isLoading {
                     ProgressView()
                         .controlSize(.large)
-                        .frame(height: 50)
+                        .frame(height: BrandSpacing.buttonHeight)
                 } else {
                     AppleSignInButton { request in
                         viewModel.prepareAppleRequest(request)
                     } onCompletion: { result in
                         viewModel.handleAppleSignIn(result)
                     }
-                    .frame(height: 50)
+                    .frame(height: BrandSpacing.buttonHeight)
 
                     googleSignInButton
                 }
@@ -66,8 +66,9 @@ struct AuthView: View {
                         .padding(.top, 4)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 52)
+            .padding(.horizontal, BrandSpacing.screenHorizontal)
+            .padding(.bottom, BrandSpacing.screenBottom)
+            .background(.background)
         }
     }
 
@@ -80,7 +81,7 @@ struct AuthView: View {
             Image("google-signin-button")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 50)
+                .frame(height: BrandSpacing.buttonHeight)
         }
     }
 }
