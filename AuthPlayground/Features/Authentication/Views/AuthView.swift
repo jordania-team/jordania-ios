@@ -8,10 +8,11 @@
 import AuthenticationServices
 import SwiftUI
 
-/// Tela principal de autenticação. Layout e apresentação apenas —
+/// Tela de autenticação. Layout e apresentação apenas —
 /// toda orquestração vive no AuthViewModel.
 struct AuthView: View {
-
+    
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(SessionStore.self) private var session
     @State private var viewModel: AuthViewModel
 
@@ -20,74 +21,43 @@ struct AuthView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if session.isSignedIn {
-                    signedInView
-                } else {
-                    signedOutView
-                }
-            }
-            .animation(.easeInOut, value: session.isSignedIn)
-            .navigationTitle("Auth Playground")
-            .navigationBarTitleDisplayMode(.large)
-        }
-    }
-
-    // MARK: - Signed Out
-
-    private var signedOutView: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 12) {
-                Image(systemName: "person.badge.key.fill")
+            // MARK: - Hero
+            VStack(spacing: 16) {
+                Image(systemName: "pawprint.fill")
                     .font(.system(size: 64))
                     .foregroundStyle(.indigo)
 
-                Text("Bem-vindo")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                Text("iPet")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
 
-                Text("Escolha um método para entrar.")
+                Text("A rede social dos seus pets")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer()
 
-            VStack(spacing: 16) {
+            // MARK: - Auth Buttons
+            VStack(spacing: 12) {
                 if session.isLoading {
                     ProgressView()
                         .controlSize(.large)
+                        .frame(height: 50)
                 } else {
                     SignInWithAppleButton(.signIn) { request in
                         viewModel.prepareAppleRequest(request)
                     } onCompletion: { result in
                         viewModel.handleAppleSignIn(result)
                     }
-                    .signInWithAppleButtonStyle(.black)
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                     .frame(height: 50)
 
-                    Button {
-                        viewModel.signInWithGoogle()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "globe")
-                                .font(.system(size: 18, weight: .medium))
-                            Text("Entrar com Google")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(.regularMaterial)
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.primary.opacity(0.15), lineWidth: 1)
-                        }
-                    }
+                    googleSignInButton
                 }
 
                 if let error = session.authError {
@@ -95,70 +65,26 @@ struct AuthView: View {
                         .font(.footnote)
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
+                        .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            .padding(.bottom, 52)
         }
     }
 
-    // MARK: - Signed In
+    // MARK: - Google Button
 
-    private var signedInView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            VStack(spacing: 8) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.green)
-
-                Text("Autenticado")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                if let name = session.currentUser?.name {
-                    Text(name)
-                        .font(.headline)
-                }
-
-                if let email = session.currentUser?.email {
-                    Text(email)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let provider = session.currentUser?.provider {
-                    Text("Provider: \(provider.displayName)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 4)
-                }
-
-                #if DEBUG
-                // Validação visual da spike — impossível compilar em Release.
-                if let token = session.currentUser?.accessToken {
-                    Text("JWT: \(String(token.prefix(24)))…")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .monospaced()
-                        .padding(.top, 2)
-                }
-                #endif
-            }
-
-            Spacer()
-
-            Button(role: .destructive) {
-                viewModel.signOut()
-            } label: {
-                Text("Sair")
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-            }
-            .buttonStyle(.bordered)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+    /// Botão Google seguindo as Brand Guidelines do Google:
+    /// fundo branco, logo SVG oficial, texto "Continuar com Google".
+    private var googleSignInButton: some View {
+        Button {
+            viewModel.signInWithGoogle()
+        } label: {
+            Image("google-signin-button")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 50)
         }
     }
 }

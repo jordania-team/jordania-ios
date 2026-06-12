@@ -20,7 +20,7 @@ struct RootView: View {
                 onSignOut: { sessionStore.signOut() }
             )
         } else {
-            AuthView()
+            AuthView(session: sessionStore)
                 .environment(sessionStore)
         }
     }
