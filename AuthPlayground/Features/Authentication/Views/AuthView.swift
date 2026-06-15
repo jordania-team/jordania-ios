@@ -42,34 +42,37 @@ struct AuthView: View {
             Spacer()
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                if session.isLoading {
-                    ProgressView()
-                        .controlSize(.large)
-                        .frame(height: BrandSpacing.buttonHeight)
-                } else {
-                    AppleSignInButton { request in
-                        viewModel.prepareAppleRequest(request)
-                    } onCompletion: { result in
-                        viewModel.handleAppleSignIn(result)
-                    }
-                    .frame(height: BrandSpacing.buttonHeight)
-
-                    googleSignInButton
-                }
-
-                if let error = session.authError {
-                    Text(error.localizedDescription)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-                }
-            }
-            .padding(.horizontal, BrandSpacing.screenHorizontal)
-            .padding(.bottom, BrandSpacing.screenBottom)
-            .background(.background)
+            authButtonsSection
         }
+    }
+
+    // MARK: - Auth Buttons
+
+    private var authButtonsSection: some View {
+        VStack(spacing: 12) {
+            if session.isLoading {
+                ProgressView()
+                    .controlSize(.large)
+                    .frame(height: BrandSpacing.buttonHeight)
+            } else {
+                AppleSignInButton(
+                    onRequest: { viewModel.prepareAppleRequest($0) },
+                    onCompletion: { viewModel.handleAppleSignIn($0) }
+                )
+
+                googleSignInButton
+            }
+
+            if let error = session.authError {
+                Text(error.localizedDescription)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, BrandSpacing.screenHorizontal)
+        .padding(.bottom, BrandSpacing.screenBottom)
     }
 
     // MARK: - Google Button
@@ -78,18 +81,34 @@ struct AuthView: View {
         Button {
             viewModel.signInWithGoogle()
         } label: {
-            Image("google-signin-button")
-                .resizable()
-                .scaledToFit()
-                .frame(height: BrandSpacing.buttonHeight)
+            HStack(spacing: 10) {
+                Image("google-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20)
+
+                Text("Continue with Google")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: BrandSpacing.buttonHeight)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
+            )
         }
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Apple Sign In Button
 
-/// Subview isolada para que @Environment(\.colorScheme) reaja
-/// corretamente a mudanças de tema em tempo real.
+/// Subview isolada: obrigatório para @Environment(\.colorScheme) reagir
+/// corretamente. SignInWithAppleButton não tem estilo "automatic" —
+/// preto em fundo claro, branco em fundo escuro (HIG).
 private struct AppleSignInButton: View {
 
     @Environment(\.colorScheme) private var colorScheme
@@ -100,6 +119,8 @@ private struct AppleSignInButton: View {
     var body: some View {
         SignInWithAppleButton(.signIn, onRequest: onRequest, onCompletion: onCompletion)
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(maxWidth: .infinity)
+            .frame(height: BrandSpacing.buttonHeight)
     }
 }
 
