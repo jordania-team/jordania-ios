@@ -10,17 +10,17 @@ import Foundation
 import Combine
 
 @MainActor
-final class TarefasViewModel: ObservableObject {
+final class TasksViewModel: ObservableObject {
 
-    @Published var tarefas: [Tarefa] = []
+    @Published var tarefas: [Tasks] = []
     @Published var titulo: String = ""
     @Published var descricao: String = ""
     @Published var mensagemErro: String?
     @Published var carregando: Bool = false
 
-    private let service: TarefaService
+    private let service: TasksService
 
-    init(service: TarefaService) {
+    init(service: TasksService) {
         self.service = service
     }
 
@@ -60,7 +60,7 @@ final class TarefasViewModel: ObservableObject {
         carregando = false
     }
 
-    func concluirTarefa(_ tarefa: Tarefa) async {
+    func concluirTarefa(_ tarefa: Tasks) async {
         carregando = true
         mensagemErro = nil
         do {
@@ -74,7 +74,7 @@ final class TarefasViewModel: ObservableObject {
         carregando = false
     }
 
-    func deletarTarefa(_ tarefa: Tarefa) async {
+    func deletarTarefa(_ tarefa: Tasks) async {
         carregando = true
         mensagemErro = nil
         do {

@@ -30,8 +30,7 @@ final class SessionStore {
 
     // MARK: - Init
 
-    init(persistence: SessionPersistence? = nil) {
-        let persistence = persistence ?? SessionPersistence()
+    init(persistence: SessionPersistence = SessionPersistence()) {
         self.persistence = persistence
         self.currentUser = persistence.loadSession()
     }

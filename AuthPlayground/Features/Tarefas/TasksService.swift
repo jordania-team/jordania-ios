@@ -10,7 +10,7 @@ import Foundation
 
 /// Responsável pelas chamadas HTTP para o endpoint /api/tarefas.
 /// Token, 401 e refresh são tratados pelo APIClient — este service só monta requests.
-final class TarefaService {
+final class TasksService {
 
     private let baseURL = AppConfiguration.apiBaseURL.appendingPathComponent("api")
     private let apiClient: APIClient
@@ -19,27 +19,27 @@ final class TarefaService {
         self.apiClient = apiClient
     }
 
-    func listar() async throws -> [Tarefa] {
+    func listar() async throws -> [Tasks] {
         let data = try await apiClient.perform(buildRequest(url: baseURL.appendingPathComponent("tarefas"), method: "GET"))
-        return try decodificar([Tarefa].self, from: data)
+        return try decodificar([Tasks].self, from: data)
     }
 
-    func criar(titulo: String, descricao: String?) async throws -> Tarefa {
+    func criar(titulo: String, descricao: String?) async throws -> Tasks {
         let url = baseURL.appendingPathComponent("tarefas")
         var request = buildRequest(url: url, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CriarTarefaRequest(titulo: titulo, descricao: descricao))
         let data = try await apiClient.perform(request)
-        return try decodificar(Tarefa.self, from: data)
+        return try decodificar(Tasks.self, from: data)
     }
 
-    func concluir(id: Int) async throws -> Tarefa {
+    func concluir(id: Int) async throws -> Tasks {
         let url = baseURL
             .appendingPathComponent("tarefas")
             .appendingPathComponent(String(id))
             .appendingPathComponent("concluir")
         let data = try await apiClient.perform(buildRequest(url: url, method: "PATCH"))
-        return try decodificar(Tarefa.self, from: data)
+        return try decodificar(Tasks.self, from: data)
     }
 
     func deletar(id: Int) async throws {

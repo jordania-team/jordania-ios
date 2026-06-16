@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct Tarefa: Identifiable, Codable {
+struct Tasks: Identifiable, Codable {
     let id: Int
     let titulo: String
     let descricao: String?

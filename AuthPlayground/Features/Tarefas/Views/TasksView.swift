@@ -8,15 +8,15 @@
 
 import SwiftUI
 
-struct TarefasView: View {
+struct TasksView: View {
 
-    @StateObject private var viewModel: TarefasViewModel
+    @StateObject private var viewModel: TasksViewModel
     private let onSignOut: () -> Void
 
     init(apiClient: APIClient, onSignOut: @escaping () -> Void) {
         _viewModel = StateObject(
-            wrappedValue: TarefasViewModel(
-                service: TarefaService(apiClient: apiClient)
+            wrappedValue: TasksViewModel(
+                service: TasksService(apiClient: apiClient)
             )
         )
         self.onSignOut = onSignOut

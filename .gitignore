@@ -65,3 +65,4 @@ AuthPlayground/GoogleService-Info.plist
 *.xcuserstate
 AuthPlayground/AppConfiguration.swift
 *.xcuserstate
+AuthPlayground/GoogleSignIn-Info.plist

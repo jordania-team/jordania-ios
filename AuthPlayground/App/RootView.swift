@@ -13,12 +13,13 @@ struct RootView: View {
 
     let sessionStore: SessionStore
     let apiClient: APIClient
+    let authViewModel: AuthViewModel
 
     var body: some View {
         if sessionStore.isSignedIn {
-            TarefasView(
+            TasksView(
                 apiClient: apiClient,
-                onSignOut: { sessionStore.signOut() }
+                onSignOut: { authViewModel.signOut() }
             )
         } else {
             AuthView(session: sessionStore)

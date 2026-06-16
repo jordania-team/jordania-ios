@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		693F0FDA2FCD1239007C635A /* AuthPlayground.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuthPlayground.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		693F0FDA2FCD1239007C635A /* AuthPlayground.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AuthPlayground.app; path = "/Users/ferrari/Desktop/XCode/jordania-ios/build/Debug-iphoneos/AuthPlayground.app"; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,16 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* AuthPlayground */,
-				693F0FDB2FCD1239007C635A /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		693F0FDB2FCD1239007C635A /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				693F0FDA2FCD1239007C635A /* AuthPlayground.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -120,7 +111,7 @@
 				693F101C2FCD2546007C635A /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 693F0FDB2FCD1239007C635A /* Products */;
+			productRefGroup = 693F0FD12FCD1239007C635A;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (

@@ -13,17 +13,19 @@ struct AuthPlaygroundApp: App {
 
     private let sessionStore: SessionStore
     private let apiClient: APIClient
+    private let authViewModel: AuthViewModel
 
     init() {
-        Self.configurarGoogleSignIn()
+        Self.configureGoogleSignIn()
         let store = SessionStore(persistence: SessionPersistence())
         self.sessionStore = store
         self.apiClient = APIClient(keychain: KeychainService(), session: .shared, sessionStore: store)
+        self.authViewModel = AuthViewModel(session: store)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(sessionStore: sessionStore, apiClient: apiClient)
+            RootView(sessionStore: sessionStore, apiClient: apiClient, authViewModel: authViewModel)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }
@@ -32,7 +34,7 @@ struct AuthPlaygroundApp: App {
 
     // MARK: - Private
 
-    private static func configurarGoogleSignIn() {
+    private static func configureGoogleSignIn() {
         guard
             let path = Bundle.main.path(forResource: "GoogleSignIn-Info", ofType: "plist"),
             let plist = NSDictionary(contentsOfFile: path),
