@@ -12,15 +12,18 @@ import GoogleSignIn
 struct AuthPlaygroundApp: App {
 
     private let sessionStore: SessionStore
+    private let apiClient: APIClient
 
     init() {
         Self.configurarGoogleSignIn()
-        self.sessionStore = SessionStore(persistence: SessionPersistence())
+        let store = SessionStore(persistence: SessionPersistence())
+        self.sessionStore = store
+        self.apiClient = APIClient(sessionStore: store)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(sessionStore: sessionStore)
+            RootView(sessionStore: sessionStore, apiClient: apiClient)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

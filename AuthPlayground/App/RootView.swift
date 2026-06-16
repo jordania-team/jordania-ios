@@ -12,11 +12,12 @@ import SwiftUI
 struct RootView: View {
 
     let sessionStore: SessionStore
+    let apiClient: APIClient
 
     var body: some View {
         if sessionStore.isSignedIn {
             TarefasView(
-                sessionStore: sessionStore,
+                apiClient: apiClient,
                 onSignOut: { sessionStore.signOut() }
             )
         } else {
