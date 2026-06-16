@@ -64,3 +64,4 @@ AuthPlayground/GoogleService-Info.plist
 .DS_Store
 AuthPlayground/GoogleSignIn-Info.plist
 *.xcuserstate
+AuthPlayground/AppConfiguration.swift
