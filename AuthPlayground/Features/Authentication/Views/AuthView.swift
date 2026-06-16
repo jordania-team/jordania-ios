@@ -33,7 +33,7 @@ struct AuthView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("A rede social dos seus pets")
+                Text("The social network for your pets")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -53,7 +53,9 @@ struct AuthView: View {
             if session.isLoading {
                 ProgressView()
                     .controlSize(.large)
-                    .frame(height: BrandSpacing.buttonHeight)
+                    // reserva a altura dos dois botões + spacing para evitar layout shift
+                    // quando o loading aparece/desaparece.
+                    .frame(height: BrandSpacing.buttonHeight * 2 + 12)
             } else {
                 AppleSignInButton(
                     onRequest: { viewModel.prepareAppleRequest($0) },
@@ -68,6 +70,8 @@ struct AuthView: View {
             if let error = session.authError {
                 Text(error.localizedDescription)
                     .font(.footnote)
+                    // TODO: substituir por cor semântica de erro em BrandColors
+                    // (ex.: BrandColors.error) com contraste validado em light e dark mode.
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
@@ -91,10 +95,15 @@ private struct AppleSignInButton: View {
     let onCompletion: (Result<ASAuthorization, Error>) -> Void
 
     var body: some View {
-        SignInWithAppleButton(.signIn, onRequest: onRequest, onCompletion: onCompletion)
+        SignInWithAppleButton(.continue, onRequest: onRequest, onCompletion: onCompletion)
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(maxWidth: .infinity)
             .frame(height: BrandSpacing.buttonHeight)
+            .environment(\.locale, Locale(identifier: "en")) // mantem o título em ingles mesmo em devices com outro idioma
+            // SignInWithAppleButton (wrapper de ASAuthorizationAppleIDButton) lê o
+            // colorScheme só na criação e não re-renderiza no toggle de tema.
+            // recriar via .id força o redraw; o botão é stateless, sem um custo real.
+            .id(colorScheme)
     }
 }
 
@@ -119,22 +128,24 @@ private struct GoogleSignInButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image("google-logo")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 20, height: 20)
 
                 Text("Continue with Google")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(foregroundColor)
             }
             .frame(maxWidth: .infinity)
             .frame(height: BrandSpacing.buttonHeight)
             .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: BrandSpacing.buttonCornerRadius))
         }
         .buttonStyle(.plain)
+        // garante leitura correta no VoiceOver, independente do nome do asset.
+        .accessibilityLabel("Continue with Google")
     }
 }
 

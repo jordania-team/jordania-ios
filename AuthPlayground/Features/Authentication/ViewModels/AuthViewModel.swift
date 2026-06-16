@@ -17,6 +17,7 @@ final class AuthViewModel {
 
     // MARK: - Dependencies
 
+    private var signInTask: Task<Void, Never>?
     private let session: SessionStore
     private let appleAuthService: AppleAuthService
     private let googleAuthService: GoogleAuthService
@@ -69,8 +70,11 @@ final class AuthViewModel {
     /// Fluxo único para qualquer provider: loading → service → sessão.
     /// Cancelamentos (usuário ou Task) são silenciosos; o resto vira mensagem na UI.
     private func performSignIn(_ operation: @escaping () async throws -> AuthenticatedUser) {
+        // ignora toques repetidos enquanto um fluxo esta em curso
+        guard signInTask == nil else { return }
         session.isLoading = true
-        Task {
+        signInTask = Task {
+            defer { signInTask = nil }
             do {
                 let user = try await operation()
                 session.signIn(with: user)

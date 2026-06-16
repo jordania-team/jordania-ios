@@ -81,7 +81,7 @@ struct BackendAuthService {
         guard (200...299).contains(http.statusCode) else {
             throw mapHTTPError(status: http.statusCode, data: data)
         }
-
+        
         do {
             return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
         } catch {
