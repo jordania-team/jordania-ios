@@ -18,7 +18,7 @@ struct AuthPlaygroundApp: App {
         Self.configurarGoogleSignIn()
         let store = SessionStore(persistence: SessionPersistence())
         self.sessionStore = store
-        self.apiClient = APIClient(sessionStore: store)
+        self.apiClient = APIClient(keychain: KeychainService(), session: .shared, sessionStore: store)
     }
 
     var body: some Scene {

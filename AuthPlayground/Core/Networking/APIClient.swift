@@ -31,7 +31,7 @@ actor APIClient {
     private var refreshTask: Task<String, Error>?
 
     init(
-        keychain: KeychainService = KeychainService(),
+        keychain: KeychainService,
         session: URLSession = .shared,
         sessionStore: SessionStore
     ) {

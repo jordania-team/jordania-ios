@@ -10,12 +10,11 @@ import OSLog
 import Security
 
 /// Persiste e recupera a sessão do usuário e o JWT no Keychain do iOS.
-/// dois itens distintos: sessão (identidade) e token (credencial).
-/// o JWT nunca transita por modelos de domínio ou memória da UI.
-final class KeychainService {
+/// Dois itens distintos: sessão (identidade) e token (credencial).
+/// O JWT nunca transita por modelos de domínio ou memória da UI.
+struct KeychainService {
 
-    private static let logger = Logger(subsystem: "app.jordania", category: "Keychain")
-
+    private let logger = Logger(subsystem: "app.jordania", category: "Keychain")
     private let service = "app.jordania.auth"
 
     private enum Account: String {
@@ -65,7 +64,7 @@ final class KeychainService {
     private func load<T: Decodable>(type: T.Type, account: Account) -> T? {
         guard let data = loadRaw(account: account) else { return nil }
         guard let value = try? JSONDecoder().decode(T.self, from: data) else {
-            Self.logger.error("Item no Keychain corrompido ou schema antigo (\(account.rawValue)) — removendo.")
+            logger.error("Item no Keychain corrompido ou schema antigo (\(account.rawValue)) — removendo.")
             try? delete(account: account)
             return nil
         }
@@ -86,7 +85,7 @@ final class KeychainService {
         }
 
         guard status == errSecSuccess else {
-            Self.logger.error("Falha ao salvar (\(account.rawValue)): \(Self.describe(status))")
+            logger.error("Falha ao salvar (\(account.rawValue)): \(Self.describe(status))")
             throw AuthError.failed("Não foi possível salvar a sessão com segurança.")
         }
     }
@@ -101,7 +100,7 @@ final class KeychainService {
 
         guard status == errSecSuccess, let data = result as? Data else {
             if status != errSecItemNotFound {
-                Self.logger.error("Falha ao ler (\(account.rawValue)): \(Self.describe(status))")
+                logger.error("Falha ao ler (\(account.rawValue)): \(Self.describe(status))")
             }
             return nil
         }
@@ -111,7 +110,7 @@ final class KeychainService {
     private func delete(account: Account) throws {
         let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            Self.logger.error("Falha ao remover (\(account.rawValue)): \(Self.describe(status))")
+            logger.error("Falha ao remover (\(account.rawValue)): \(Self.describe(status))")
             throw AuthError.failed("Não foi possível encerrar a sessão com segurança.")
         }
     }
