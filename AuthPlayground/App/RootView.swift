@@ -14,9 +14,9 @@ struct RootView: View {
     let sessionStore: SessionStore
 
     var body: some View {
-        if sessionStore.isSignedIn, let user = sessionStore.currentUser {
+        if sessionStore.isSignedIn {
             TarefasView(
-                accessToken: user.accessToken,
+                sessionStore: sessionStore,
                 onSignOut: { sessionStore.signOut() }
             )
         } else {

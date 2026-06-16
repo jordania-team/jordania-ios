@@ -65,7 +65,7 @@ final class AppleAuthService {
     }
 
     /// Processa o resultado do onCompletion do SignInWithAppleButton.
-    func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthenticatedUser {
+    func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthSession {
         // Nonce e one-time: consome e limpa, em sucesso ou falha.
         defer { currentNonce = nil }
 
@@ -100,13 +100,7 @@ final class AppleAuthService {
 
             PendingAppleName.clear()
 
-            return AuthenticatedUser(
-                id: session.userId,
-                name: session.name,
-                email: session.email,
-                provider: .apple,
-                accessToken: session.token
-            )
+            return session
         }
     }
 

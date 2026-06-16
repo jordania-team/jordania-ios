@@ -10,7 +10,7 @@ import OSLog
 import UIKit
 
 /// Responsavel exclusivamente pelo fluxo de Sign in with Google.
-/// Obtem o idToken do Google, envia ao backend e retorna AuthenticatedUser.
+/// Obtem o idToken do Google, envia ao backend e retorna AuthSession.
 ///
 /// Importa UIKit por exigencia do GoogleSignIn SDK (apresentacao via UIViewController) —
 /// excecao unica a regra de "no UIKit in Core/", registrada no Decision Log.
@@ -30,7 +30,7 @@ final class GoogleAuthService {
 
     // MARK: - Public API
 
-    func signIn() async throws -> AuthenticatedUser {
+    func signIn() async throws -> AuthSession {
         guard let rootViewController = rootViewController() else {
             Self.logger.error("Root view controller indisponível para apresentar o Google Sign In.")
             throw AuthError.failed("Não foi possível iniciar o login com o Google.")
@@ -51,17 +51,9 @@ final class GoogleAuthService {
             throw AuthError.failed("Não foi possível concluir o login com o Google. Tente novamente.")
         }
 
-        let session = try await backendAuthService.login(
+        return try await backendAuthService.login(
             provider: .google,
             identityToken: idToken
-        )
-
-        return AuthenticatedUser(
-            id: session.userId,
-            name: session.name,
-            email: session.email,
-            provider: .google,
-            accessToken: session.token
         )
     }
 

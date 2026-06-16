@@ -21,10 +21,11 @@ enum AuthProvider: String, Codable {
 }
 
 /// Sessão do usuário autenticado — é o objeto persistido no Keychain.
+/// O JWT não faz parte deste modelo: vive isolado no Keychain e é lido
+/// exclusivamente pelo APIClient no momento de cada request.
 struct AuthenticatedUser: Codable, Equatable {
     let id: UUID
     let name: String?
     let email: String?
     let provider: AuthProvider
-    let accessToken: String
 }

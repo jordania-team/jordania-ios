@@ -9,24 +9,71 @@ import Foundation
 import OSLog
 import Security
 
-/// Persiste e recupera a sessão do usuário no Keychain do iOS.
-/// O Keychain é o único lugar seguro para armazenar JWTs — nunca SwiftData ou UserDefaults.
+/// Persiste e recupera a sessão do usuário e o JWT no Keychain do iOS.
+/// dois itens distintos: sessão (identidade) e token (credencial).
+/// o JWT nunca transita por modelos de domínio ou memória da UI.
 final class KeychainService {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "Keychain")
 
     private let service = "app.jordania.auth"
-    private let account = "current-session"
 
-    // MARK: - Public API
+    private enum Account: String {
+        case session = "current-session"
+        case accessToken = "access-token"
+    }
 
-    /// Persiste a sessão no Keychain.
-    /// Upsert via SecItemUpdate + SecItemAdd fallback — atômico, sem a janela de
-    /// perda de sessão do padrão delete+add (ver Decision Log).
-    func save(_ user: AuthenticatedUser) throws {
-        let data = try JSONEncoder().encode(user)
+    // MARK: - Session (AuthenticatedUser sem token)
 
-        let query = baseQuery()
+    func saveSession(_ user: AuthenticatedUser) throws {
+        try save(Codable: user, account: .session)
+    }
+
+    func loadSession() -> AuthenticatedUser? {
+        load(type: AuthenticatedUser.self, account: .session)
+    }
+
+    // MARK: - Token (JWT isolado)
+
+    func saveToken(_ token: String) throws {
+        guard let data = token.data(using: .utf8) else {
+            throw AuthError.failed("Token inválido.")
+        }
+        try saveRaw(data: data, account: .accessToken)
+    }
+
+    func loadToken() -> String? {
+        guard let data = loadRaw(account: .accessToken) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    // MARK: - Clear
+
+    /// Remove sessão e token. Item inexistente não é erro.
+    func clearAll() throws {
+        try delete(account: .session)
+        try delete(account: .accessToken)
+    }
+
+    // MARK: - Private primitives
+
+    private func save<T: Encodable>(Codable value: T, account: Account) throws {
+        let data = try JSONEncoder().encode(value)
+        try saveRaw(data: data, account: account)
+    }
+
+    private func load<T: Decodable>(type: T.Type, account: Account) -> T? {
+        guard let data = loadRaw(account: account) else { return nil }
+        guard let value = try? JSONDecoder().decode(T.self, from: data) else {
+            Self.logger.error("Item no Keychain corrompido ou schema antigo (\(account.rawValue)) — removendo.")
+            try? delete(account: account)
+            return nil
+        }
+        return value
+    }
+
+    private func saveRaw(data: Data, account: Account) throws {
+        let query = baseQuery(account: account)
         let update: [String: Any] = [kSecValueData as String: data]
 
         var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
@@ -34,22 +81,18 @@ final class KeychainService {
         if status == errSecItemNotFound {
             var attributes = query
             attributes[kSecValueData as String] = data
-            // Acessível após primeiro desbloqueio, apenas neste dispositivo —
-            // não migra via iCloud Keychain nem backups.
             attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             status = SecItemAdd(attributes as CFDictionary, nil)
         }
 
         guard status == errSecSuccess else {
-            Self.logger.error("Falha ao salvar sessão: \(Self.describe(status))")
+            Self.logger.error("Falha ao salvar (\(account.rawValue)): \(Self.describe(status))")
             throw AuthError.failed("Não foi possível salvar a sessão com segurança.")
         }
     }
 
-    /// Recupera a sessão persistida, se existir.
-    /// Entrada corrompida ou com schema antigo é removida — nunca fica órfã no Keychain.
-    func load() -> AuthenticatedUser? {
-        var query = baseQuery()
+    private func loadRaw(account: Account) -> Data? {
+        var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -58,35 +101,26 @@ final class KeychainService {
 
         guard status == errSecSuccess, let data = result as? Data else {
             if status != errSecItemNotFound {
-                Self.logger.error("Falha ao ler sessão: \(Self.describe(status))")
+                Self.logger.error("Falha ao ler (\(account.rawValue)): \(Self.describe(status))")
             }
             return nil
         }
-
-        guard let user = try? JSONDecoder().decode(AuthenticatedUser.self, from: data) else {
-            Self.logger.error("Sessão no Keychain corrompida ou com schema antigo — removendo.")
-            try? clear()
-            return nil
-        }
-        return user
+        return data
     }
 
-    /// Remove a sessão do Keychain. Item inexistente não é erro.
-    func clear() throws {
-        let status = SecItemDelete(baseQuery() as CFDictionary)
+    private func delete(account: Account) throws {
+        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            Self.logger.error("Falha ao remover sessão: \(Self.describe(status))")
+            Self.logger.error("Falha ao remover (\(account.rawValue)): \(Self.describe(status))")
             throw AuthError.failed("Não foi possível encerrar a sessão com segurança.")
         }
     }
 
-    // MARK: - Private
-
-    private func baseQuery() -> [String: Any] {
+    private func baseQuery(account: Account) -> [String: Any] {
         [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account.rawValue
         ]
     }
 

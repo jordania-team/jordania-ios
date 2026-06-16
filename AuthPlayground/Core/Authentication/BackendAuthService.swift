@@ -8,17 +8,37 @@
 import Foundation
 import OSLog
 
+// MARK: - DTOs
+
 /// Resposta do endpoint POST /auth/login.
 /// O backend valida o identityToken do provider e retorna o JWT interno + dados do usuário.
-struct AuthSessionResponse: Decodable {
+private struct AuthSessionResponse: Decodable {
     let token: String
     let userId: UUID
     let name: String?
     let email: String?
 }
 
+private struct LoginRequest: Encodable {
+    let provider: String
+    let identityToken: String
+    /// nil é omitido do JSON automaticamente — o backend trata ausência como string vazia.
+    let name: String?
+    /// Nonce original (pré-SHA256). Obrigatório para Apple Sign In.
+    let rawNonce: String?
+}
+
+// MARK: - AuthSession
+
+/// Par (identidade + token) retornado após login bem-sucedido.
+/// O token não integra AuthenticatedUser — vive isolado no Keychain,
+/// lido exclusivamente pelo APIClient no momento de cada request.
+typealias AuthSession = (user: AuthenticatedUser, token: String)
+
+// MARK: - BackendAuthService
+
 /// Responsável exclusivamente pela chamada ao backend de autenticação.
-/// Recebe o identityToken do provider (Apple/Google) e retorna a sessão do backend.
+/// Recebe o identityToken do provider (Apple/Google) e retorna AuthSession.
 /// Não conhece SessionStore, View ou qualquer outro layer.
 ///
 /// Fronteira de erros: transporte/protocolo lança NetworkError (Core/Networking);
@@ -26,6 +46,8 @@ struct AuthSessionResponse: Decodable {
 struct BackendAuthService {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "BackendAuth")
+    
+    nonisolated init() {}
 
     // MARK: - Public API
 
@@ -41,7 +63,7 @@ struct BackendAuthService {
         identityToken: String,
         name: String? = nil,
         rawNonce: String? = nil
-    ) async throws -> AuthSessionResponse {
+    ) async throws -> AuthSession {
         let url = AppConfiguration.apiBaseURL
             .appendingPathComponent("auth")
             .appendingPathComponent("login")
@@ -81,13 +103,23 @@ struct BackendAuthService {
         guard (200...299).contains(http.statusCode) else {
             throw mapHTTPError(status: http.statusCode, data: data)
         }
-        
+
+        let sessionResponse: AuthSessionResponse
         do {
-            return try JSONDecoder().decode(AuthSessionResponse.self, from: data)
+            sessionResponse = try JSONDecoder().decode(AuthSessionResponse.self, from: data)
         } catch {
             Self.logger.error("Falha ao decodificar AuthSessionResponse: \(error)")
             throw NetworkError.decodingError
         }
+
+        let user = AuthenticatedUser(
+            id: sessionResponse.userId,
+            name: sessionResponse.name,
+            email: sessionResponse.email,
+            provider: provider
+        )
+
+        return (user: user, token: sessionResponse.token)
     }
 
     // MARK: - Error Mapping
@@ -107,15 +139,4 @@ struct BackendAuthService {
             return NetworkError.serverError(statusCode: status)
         }
     }
-}
-
-// MARK: - Private DTOs
-
-private struct LoginRequest: Encodable {
-    let provider: String
-    let identityToken: String
-    /// nil é omitido do JSON automaticamente — o backend trata ausência como string vazia.
-    let name: String?
-    /// Nonce original (pré-SHA256). Obrigatório para Apple Sign In.
-    let rawNonce: String?
 }

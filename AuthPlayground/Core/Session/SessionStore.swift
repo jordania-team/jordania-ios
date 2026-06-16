@@ -11,6 +11,7 @@ import OSLog
 
 /// Fonte única de verdade do estado de autenticação.
 /// Delega persistência para SessionPersistence — não conhece Keychain diretamente.
+/// O JWT nunca é exposto em propriedades observáveis — a UI não precisa dele.
 @Observable
 @MainActor
 final class SessionStore {
@@ -25,20 +26,15 @@ final class SessionStore {
 
     // MARK: - Dependencies
 
-    /// Não-opcional por design: esquecer a persistência não pode compilar como no-op
-    /// silencioso. Para testes/previews, injete um SessionPersistence com Keychain fake.
     private let persistence: SessionPersistence
 
     // MARK: - Init
 
-    /// Parâmetro opcional apenas para contornar a avaliação nonisolated de default
-    /// arguments — a propriedade é non-optional e sempre recebe uma instância real.
     init(persistence: SessionPersistence? = nil) {
         let persistence = persistence ?? SessionPersistence()
         self.persistence = persistence
         self.currentUser = persistence.loadSession()
     }
-
 
     // MARK: - Computed
 
@@ -48,19 +44,18 @@ final class SessionStore {
 
     // MARK: - Actions
 
-    func signIn(with user: AuthenticatedUser) {
+    func signIn(user: AuthenticatedUser, token: String) {
         isLoading = false
         authError = nil
         do {
-            try persistence.save(user)
+            try persistence.save(user: user, token: token)
             currentUser = user
         } catch {
             authError = .failed("Não foi possível salvar a sessão com segurança.")
         }
     }
 
-    /// A UI sempre desloga, mesmo se a limpeza do Keychain falhar — o usuário nunca
-    /// fica preso numa sessão. A falha é logada como evento de segurança.
+    /// A UI sempre desloga, mesmo se a limpeza do Keychain falhar.
     func signOut() {
         isLoading = false
         currentUser = nil

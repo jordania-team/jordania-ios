@@ -69,19 +69,21 @@ final class AuthViewModel {
 
     /// Fluxo único para qualquer provider: loading → service → sessão.
     /// Cancelamentos (usuário ou Task) são silenciosos; o resto vira mensagem na UI.
-    private func performSignIn(_ operation: @escaping () async throws -> AuthenticatedUser) {
-        // ignora toques repetidos enquanto um fluxo esta em curso
+    private func performSignIn(_ operation: @escaping () async throws -> AuthSession) {
         guard signInTask == nil else { return }
         session.isLoading = true
         signInTask = Task {
             defer { signInTask = nil }
             do {
-                let user = try await operation()
-                session.signIn(with: user)
+                let authSession = try await operation()
+                session.signIn(user: authSession.user, token: authSession.token)
             } catch AuthError.cancelled, NetworkError.cancelled {
-                session.isLoading = false
+            session.isLoading = false
+            } catch let networkError as NetworkError {
+                let message = networkError.errorDescription ?? "Não foi possível concluir o login. Tente novamente."
+                session.setError(.failed(message))
             } catch {
-                session.setError(.failed(error.localizedDescription))
+                session.setError(.failed("Não foi possível concluir o login. Tente novamente."))
             }
         }
     }

@@ -14,10 +14,10 @@ struct TarefasView: View {
     private let onSignOut: () -> Void
 
     /// accessToken vem do SessionStore — fornecido pelo caller (AuthPlaygroundApp ou ContentView).
-    init(accessToken: String, onSignOut: @escaping () -> Void) {
+    init(sessionStore: SessionStore, onSignOut: @escaping () -> Void) {
         _viewModel = StateObject(
             wrappedValue: TarefasViewModel(
-                service: TarefaService(accessToken: accessToken)
+                service: TarefaService(keychain: KeychainService())
             )
         )
         self.onSignOut = onSignOut

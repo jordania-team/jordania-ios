@@ -13,15 +13,15 @@ import Foundation
 final class TarefaService {
 
     private let baseURL = AppConfiguration.apiBaseURL.appendingPathComponent("api")
-    private let accessToken: String
+    private let keychain: KeychainService
 
-    init(accessToken: String) {
-        self.accessToken = accessToken
+    init(keychain: KeychainService = KeychainService()) {
+        self.keychain = keychain
     }
 
     func listar() async throws -> [Tarefa] {
         let url = baseURL.appendingPathComponent("tarefas")
-        let (data, response) = try await URLSession.shared.data(for: autenticado(url: url, method: "GET"))
+        let (data, response) = try await URLSession.shared.data(for: try autenticado(url: url, method: "GET"))
         try validar(response)
         return try decodificar([Tarefa].self, from: data)
     }
@@ -29,7 +29,7 @@ final class TarefaService {
     func criar(titulo: String, descricao: String?) async throws -> Tarefa {
         let url = baseURL.appendingPathComponent("tarefas")
         let body = try JSONEncoder().encode(CriarTarefaRequest(titulo: titulo, descricao: descricao))
-        var request = autenticado(url: url, method: "POST")
+        var request = try autenticado(url: url, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -42,7 +42,7 @@ final class TarefaService {
             .appendingPathComponent("tarefas")
             .appendingPathComponent(String(id))
             .appendingPathComponent("concluir")
-        let (data, response) = try await URLSession.shared.data(for: autenticado(url: url, method: "PATCH"))
+        let (data, response) = try await URLSession.shared.data(for: try autenticado(url: url, method: "PATCH"))
         try validar(response)
         return try decodificar(Tarefa.self, from: data)
     }
@@ -51,16 +51,19 @@ final class TarefaService {
         let url = baseURL
             .appendingPathComponent("tarefas")
             .appendingPathComponent(String(id))
-        let (_, response) = try await URLSession.shared.data(for: autenticado(url: url, method: "DELETE"))
+        let (_, response) = try await URLSession.shared.data(for: try autenticado(url: url, method: "DELETE"))
         try validar(response)
     }
 
     // MARK: - Helpers
 
-    private func autenticado(url: URL, method: String) -> URLRequest {
+    private func autenticado(url: URL, method: String) throws -> URLRequest {
+        guard let token = keychain.loadToken() else {
+            throw NetworkError.unauthorized
+        }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request
     }
 
