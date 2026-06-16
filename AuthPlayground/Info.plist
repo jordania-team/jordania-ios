@@ -13,8 +13,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleIdentifier</key>
-	<string></string>
 	<key>NSAppTransportSecurity</key>
 	<dict/>
 </dict>

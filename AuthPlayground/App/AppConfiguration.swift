@@ -13,6 +13,6 @@ enum AppConfiguration {
     #if DEBUG
     static let apiBaseURL = URL(string: "http://10.40.57.27:8080")!
     #else
-    static let apiBaseURL = URL(string: "https://api.jordania.app")!
+    static let apiBaseURL = URL(string: "https://api.redepets.xyz")!
     #endif
 }
