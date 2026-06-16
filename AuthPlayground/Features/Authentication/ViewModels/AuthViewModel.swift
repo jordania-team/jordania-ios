@@ -78,7 +78,7 @@ final class AuthViewModel {
                 let authSession = try await operation()
                 session.signIn(user: authSession.user, token: authSession.token)
             } catch AuthError.cancelled, NetworkError.cancelled {
-            session.isLoading = false
+                session.isLoading = false
             } catch let networkError as NetworkError {
                 let message = networkError.errorDescription ?? "Não foi possível concluir o login. Tente novamente."
                 session.setError(.failed(message))

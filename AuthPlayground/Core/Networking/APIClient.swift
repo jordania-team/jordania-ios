@@ -11,23 +11,22 @@ import OSLog
 /// Ponto único de execução de requests HTTP autenticados.
 ///
 /// Responsabilidades:
-/// - le o JWT do Keychain e injeta no header Authorization antes de cada request
-/// - em 401: tenta refresh uma vez; em falha, desloga via SessionStore
-/// - NUNCA expõe o token para features ou ViewModels
+/// - Lê o JWT do Keychain e injeta no header Authorization antes de cada request
+/// - Em 401: tenta refresh uma vez; em falha, desloga via SessionStore
+/// - Nunca expõe o token para features ou ViewModels
 ///
-/// nao é usado no login inicial — BackendAuthService faz o bootstrap da sessão.
-/// todos os services de feature (ex: TarefaService) devem usar este cliente.
-final class APIClient {
+/// Não é usado no login inicial — BackendAuthService faz o bootstrap da sessão.
+/// Todos os services de feature (ex: TarefaService) devem usar este cliente.
+actor APIClient {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "APIClient")
 
     private let keychain: KeychainService
     private let session: URLSession
-    // weak para evitar retain cycle: APIClient vive em Core, SessionStore em App
     private weak var sessionStore: SessionStore?
 
     // Barreira contra refresh concorrente: apenas uma tentativa de refresh por vez.
-    // se duas chamadas simultâneas recebem 401, apenas uma executa o refresh —
+    // Se duas chamadas simultâneas recebem 401, apenas uma executa o refresh —
     // a outra aguarda o resultado.
     private var refreshTask: Task<String, Error>?
 
@@ -48,7 +47,7 @@ final class APIClient {
     /// Uso nos services de feature:
     /// ```swift
     /// let data = try await apiClient.perform(request)
-    /// let tasks = try JSONDecoder().decode([Task].self, from: data)
+    /// let tarefas = try JSONDecoder().decode([Tarefa].self, from: data)
     /// ```
     func perform(_ request: URLRequest) async throws -> Data {
         let authorizedRequest = try authorizedRequest(from: request)
@@ -59,17 +58,14 @@ final class APIClient {
             throw NetworkError.invalidResponse
         }
 
-        // Sucesso — retorna direto
         if (200...299).contains(http.statusCode) {
             return data
         }
 
-        // 401 — tenta refresh uma vez
         if http.statusCode == 401 {
             Self.logger.info("401 recebido — tentando refresh do token.")
             let newToken = try await refreshToken()
 
-            // Monta o request novamente com o novo token
             var retryRequest = request
             retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
 
@@ -83,10 +79,9 @@ final class APIClient {
                 return retryData
             }
 
-            // Refresh bem-sucedido mas request ainda falha — desloga
             if retryHTTP.statusCode == 401 {
                 Self.logger.error("401 após refresh — sessão inválida, deslogando.")
-                await forceSignOut()
+                await sessionStore?.signOut()
                 throw NetworkError.unauthorized
             }
 
@@ -117,8 +112,6 @@ final class APIClient {
         }
     }
 
-    /// Executa o refresh com barreira de concorrência.
-    /// Se um refresh já está em curso, aguarda o resultado dele — não dispara outro.
     private func refreshToken() async throws -> String {
         if let existing = refreshTask {
             Self.logger.info("Refresh já em curso — aguardando resultado.")
@@ -138,7 +131,7 @@ final class APIClient {
     /// Contrato esperado:
     /// - POST /auth/refresh
     /// - Header: Authorization: Bearer <access_token_atual>
-    ///   OU body: { "refreshToken": "..." } — confirmar com o backend via OpenAPI
+    ///   OU body: { "refreshToken": "..." } — confirmar via OpenAPI
     /// - Response: { "token": "novo_jwt" }
     ///
     /// Por ora lança `.unauthorized` para forçar logout — comportamento seguro por padrão.
@@ -146,10 +139,5 @@ final class APIClient {
         // TODO: implementar quando /auth/refresh estiver no contrato OpenAPI
         Self.logger.error("Refresh não implementado — endpoint /auth/refresh pendente de contrato.")
         throw NetworkError.unauthorized
-    }
-
-    @MainActor
-    private func forceSignOut() {
-        sessionStore?.signOut()
     }
 }

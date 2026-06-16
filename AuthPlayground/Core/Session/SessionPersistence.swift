@@ -5,9 +5,6 @@
 //  Created by Gabriel Ferrari on 31/05/26.
 //
 
-//  SessionPersistence.swift
-//  AuthPlayground
-
 import Foundation
 
 /// Responsável exclusivamente por ler e escrever sessão e JWT via Keychain.
