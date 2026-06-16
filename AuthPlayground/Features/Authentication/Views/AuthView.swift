@@ -60,7 +60,9 @@ struct AuthView: View {
                     onCompletion: { viewModel.handleAppleSignIn($0) }
                 )
 
-                googleSignInButton
+                GoogleSignInButton {
+                    viewModel.signInWithGoogle()
+                }
             }
 
             if let error = session.authError {
@@ -73,34 +75,6 @@ struct AuthView: View {
         }
         .padding(.horizontal, BrandSpacing.screenHorizontal)
         .padding(.bottom, BrandSpacing.screenBottom)
-    }
-
-    // MARK: - Google Button
-
-    private var googleSignInButton: some View {
-        Button {
-            viewModel.signInWithGoogle()
-        } label: {
-            HStack(spacing: 10) {
-                Image("google-logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 20, height: 20)
-
-                Text("Continue with Google")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.primary)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: BrandSpacing.buttonHeight)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -121,6 +95,46 @@ private struct AppleSignInButton: View {
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(maxWidth: .infinity)
             .frame(height: BrandSpacing.buttonHeight)
+    }
+}
+
+// MARK: - Google Sign In Button
+
+/// Subview isolada pelo mesmo motivo do AppleSignInButton:
+/// @Environment(\.colorScheme) só reage corretamente na view que o lê.
+/// Visual espelha o botão da Apple: fundo preto no light, branco no dark (HIG).
+private struct GoogleSignInButton: View {
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    let action: () -> Void
+
+    private var backgroundColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
+
+    private var foregroundColor: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image("google-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20)
+
+                Text("Continue with Google")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(foregroundColor)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: BrandSpacing.buttonHeight)
+            .background(backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
     }
 }
 
