@@ -8,8 +8,6 @@
 
 import Foundation
 
-/// Responsável pelas chamadas HTTP para o endpoint /api/tarefas.
-/// Token, 401 e refresh são tratados pelo APIClient — este service só monta requests.
 final class TasksService {
 
     private let baseURL = AppConfiguration.apiBaseURL.appendingPathComponent("api")
@@ -19,37 +17,34 @@ final class TasksService {
         self.apiClient = apiClient
     }
 
-    func listar() async throws -> [Tasks] {
-        let data = try await apiClient.perform(buildRequest(url: baseURL.appendingPathComponent("tarefas"), method: "GET"))
-        return try decodificar([Tasks].self, from: data)
+    func fetchAll() async throws -> [TaskItem] {
+        let data = try await apiClient.perform(buildRequest(url: taskURL(), method: "GET"))
+        return try decode([TaskItem].self, from: data)
     }
 
-    func criar(titulo: String, descricao: String?) async throws -> Tasks {
-        let url = baseURL.appendingPathComponent("tarefas")
-        var request = buildRequest(url: url, method: "POST")
+    func create(title: String, description: String?) async throws -> TaskItem {
+        var request = buildRequest(url: taskURL(), method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(CriarTarefaRequest(titulo: titulo, descricao: descricao))
+        request.httpBody = try JSONEncoder().encode(CreateTaskRequest(titulo: title, descricao: description))
         let data = try await apiClient.perform(request)
-        return try decodificar(Tasks.self, from: data)
+        return try decode(TaskItem.self, from: data)
     }
 
-    func concluir(id: Int) async throws -> Tasks {
-        let url = baseURL
-            .appendingPathComponent("tarefas")
-            .appendingPathComponent(String(id))
-            .appendingPathComponent("concluir")
+    func complete(id: Int) async throws -> TaskItem {
+        let url = taskURL(id: id).appendingPathComponent("concluir")
         let data = try await apiClient.perform(buildRequest(url: url, method: "PATCH"))
-        return try decodificar(Tasks.self, from: data)
+        return try decode(TaskItem.self, from: data)
     }
 
-    func deletar(id: Int) async throws {
-        let url = baseURL
-            .appendingPathComponent("tarefas")
-            .appendingPathComponent(String(id))
-        _ = try await apiClient.perform(buildRequest(url: url, method: "DELETE"))
+    func delete(id: Int) async throws {
+        _ = try await apiClient.perform(buildRequest(url: taskURL(id: id), method: "DELETE"))
     }
 
-    // MARK: - Helpers
+    private func taskURL(id: Int? = nil) -> URL {
+        let base = baseURL.appendingPathComponent("tarefas")
+        guard let id else { return base }
+        return base.appendingPathComponent(String(id))
+    }
 
     private func buildRequest(url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)
@@ -57,7 +52,7 @@ final class TasksService {
         return request
     }
 
-    private func decodificar<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {

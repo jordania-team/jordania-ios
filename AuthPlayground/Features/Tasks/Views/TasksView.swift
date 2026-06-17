@@ -10,12 +10,12 @@ import SwiftUI
 
 struct TasksView: View {
 
-    @StateObject private var viewModel: TasksViewModel
+    @State private var viewModel: TasksViewModel
     private let onSignOut: () -> Void
 
     init(apiClient: APIClient, onSignOut: @escaping () -> Void) {
-        _viewModel = StateObject(
-            wrappedValue: TasksViewModel(
+        _viewModel = State(
+            initialValue: TasksViewModel(
                 service: TasksService(apiClient: apiClient)
             )
         )
@@ -25,81 +25,82 @@ struct TasksView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                formulario
+                createForm
 
-                if viewModel.carregando {
-                    ProgressView("Carregando...")
+                if viewModel.isLoading {
+                    ProgressView("Loading...")
                 }
 
-                if let erro = viewModel.mensagemErro {
-                    Text(erro)
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        // TODO: substituir por BrandColors.error quando disponível
                         .foregroundStyle(.red)
                         .font(.footnote)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
 
-                lista
+                taskList
             }
             .padding()
-            .navigationTitle("Tarefas")
+            .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Recarregar") {
-                        Task { await viewModel.carregarTarefas() }
+                    Button("Reload") {
+                        Task { await viewModel.loadTasks() }
                     }
-                    Button("Sair", role: .destructive, action: onSignOut)
+                    Button("Sign Out", role: .destructive, action: onSignOut)
                 }
             }
             .task {
-                await viewModel.carregarTarefas()
+                await viewModel.loadTasks()
             }
         }
     }
 
-    private var formulario: some View {
+    private var createForm: some View {
         VStack(spacing: 8) {
-            TextField("Título", text: $viewModel.titulo)
+            TextField("Title", text: $viewModel.title)
                 .textFieldStyle(.roundedBorder)
-            TextField("Descrição (opcional)", text: $viewModel.descricao)
+            TextField("Description (optional)", text: $viewModel.taskDescription)
                 .textFieldStyle(.roundedBorder)
             Button {
-                Task { await viewModel.criarTarefa() }
+                Task { await viewModel.createTask() }
             } label: {
-                Text("Criar tarefa")
+                Text("Create task")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
         }
     }
 
-    private var lista: some View {
+    private var taskList: some View {
         List {
-            ForEach(viewModel.tarefas) { tarefa in
+            ForEach(viewModel.tasks) { task in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(tarefa.titulo)
+                        Text(task.title)
                             .font(.headline)
                         Spacer()
-                        Image(systemName: tarefa.concluida ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(tarefa.concluida ? .green : .secondary)
+                        Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(task.completed ? .green : .secondary)
                     }
 
-                    if let descricao = tarefa.descricao, !descricao.isEmpty {
-                        Text(descricao)
+                    if let description = task.description, !description.isEmpty {
+                        Text(description)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
                     HStack {
-                        if !tarefa.concluida {
-                            Button("Concluir") {
-                                Task { await viewModel.concluirTarefa(tarefa) }
+                        if !task.completed {
+                            Button("Complete") {
+                                Task { await viewModel.completeTask(task) }
                             }
                             .buttonStyle(.bordered)
                         }
-                        Button("Excluir", role: .destructive) {
-                            Task { await viewModel.deletarTarefa(tarefa) }
+                        Button("Delete", role: .destructive) {
+                            Task { await viewModel.deleteTask(task) }
                         }
                         .buttonStyle(.bordered)
                     }

@@ -7,16 +7,19 @@
 //
 
 import Foundation
-import Combine
+import OSLog
 
+@Observable
 @MainActor
-final class TasksViewModel: ObservableObject {
+final class TasksViewModel {
 
-    @Published var tarefas: [Tasks] = []
-    @Published var titulo: String = ""
-    @Published var descricao: String = ""
-    @Published var mensagemErro: String?
-    @Published var carregando: Bool = false
+    private static let logger = Logger(subsystem: "app.jordania", category: "Tasks")
+
+    var tasks: [TaskItem] = []
+    var title: String = ""
+    var taskDescription: String = ""
+    var errorMessage: String?
+    var isLoading: Bool = false
 
     private let service: TasksService
 
@@ -24,65 +27,81 @@ final class TasksViewModel: ObservableObject {
         self.service = service
     }
 
-    func carregarTarefas() async {
-        carregando = true
-        mensagemErro = nil
+    func loadTasks() async {
+        isLoading = true
+        errorMessage = nil
         do {
-            tarefas = try await service.listar()
+            tasks = try await service.fetchAll()
+        } catch let error as NetworkError {
+            Self.logger.error("loadTasks falhou: \(error)")
+            errorMessage = error.errorDescription ?? "Não foi possível carregar as tarefas."
         } catch {
-            mensagemErro = error.localizedDescription
+            Self.logger.error("loadTasks erro inesperado: \(error)")
+            errorMessage = "Não foi possível carregar as tarefas."
         }
-        carregando = false
+        isLoading = false
     }
 
-    func criarTarefa() async {
-        let tituloLimpo = titulo.trimmingCharacters(in: .whitespacesAndNewlines)
-        let descricaoLimpa = descricao.trimmingCharacters(in: .whitespacesAndNewlines)
+    func createTask() async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = taskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !tituloLimpo.isEmpty else {
-            mensagemErro = "Digite um título para a tarefa."
+        guard !trimmedTitle.isEmpty else {
+            errorMessage = "Digite um título para a tarefa."
             return
         }
 
-        carregando = true
-        mensagemErro = nil
+        isLoading = true
+        errorMessage = nil
         do {
-            let nova = try await service.criar(
-                titulo: tituloLimpo,
-                descricao: descricaoLimpa.isEmpty ? nil : descricaoLimpa
+            let newTask = try await service.create(
+                title: trimmedTitle,
+                description: trimmedDescription.isEmpty ? nil : trimmedDescription
             )
-            tarefas.insert(nova, at: 0)
-            titulo = ""
-            descricao = ""
+            tasks.insert(newTask, at: 0)
+            title = ""
+            taskDescription = ""
+        } catch let error as NetworkError {
+            Self.logger.error("createTask falhou: \(error)")
+            errorMessage = error.errorDescription ?? "Não foi possível criar a tarefa."
         } catch {
-            mensagemErro = error.localizedDescription
+            Self.logger.error("createTask erro inesperado: \(error)")
+            errorMessage = "Não foi possível criar a tarefa."
         }
-        carregando = false
+        isLoading = false
     }
 
-    func concluirTarefa(_ tarefa: Tasks) async {
-        carregando = true
-        mensagemErro = nil
+    func completeTask(_ task: TaskItem) async {
+        isLoading = true
+        errorMessage = nil
         do {
-            let atualizada = try await service.concluir(id: tarefa.id)
-            if let index = tarefas.firstIndex(where: { $0.id == tarefa.id }) {
-                tarefas[index] = atualizada
+            let updated = try await service.complete(id: task.id)
+            if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+                tasks[index] = updated
             }
+        } catch let error as NetworkError {
+            Self.logger.error("completeTask(\(task.id)) falhou: \(error)")
+            errorMessage = error.errorDescription ?? "Não foi possível concluir a tarefa."
         } catch {
-            mensagemErro = error.localizedDescription
+            Self.logger.error("completeTask(\(task.id)) erro inesperado: \(error)")
+            errorMessage = "Não foi possível concluir a tarefa."
         }
-        carregando = false
+        isLoading = false
     }
 
-    func deletarTarefa(_ tarefa: Tasks) async {
-        carregando = true
-        mensagemErro = nil
+    func deleteTask(_ task: TaskItem) async {
+        isLoading = true
+        errorMessage = nil
         do {
-            try await service.deletar(id: tarefa.id)
-            tarefas.removeAll { $0.id == tarefa.id }
+            try await service.delete(id: task.id)
+            tasks.removeAll { $0.id == task.id }
+        } catch let error as NetworkError {
+            Self.logger.error("deleteTask(\(task.id)) falhou: \(error)")
+            errorMessage = error.errorDescription ?? "Não foi possível excluir a tarefa."
         } catch {
-            mensagemErro = error.localizedDescription
+            Self.logger.error("deleteTask(\(task.id)) erro inesperado: \(error)")
+            errorMessage = "Não foi possível excluir a tarefa."
         }
-        carregando = false
+        isLoading = false
     }
 }

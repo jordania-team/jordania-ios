@@ -34,7 +34,6 @@ enum NetworkError: LocalizedError, Equatable {
         }
     }
 
-    /// Ponto unico de traducao de URLError — nenhum service deve mapear transporte por conta propria.
     init(from urlError: URLError) {
         switch urlError.code {
         case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
