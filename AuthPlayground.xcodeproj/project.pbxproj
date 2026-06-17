@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		693F0FDA2FCD1239007C635A /* AuthPlayground.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AuthPlayground.app; path = "/Users/ferrari/Desktop/XCode/jordania-ios/build/Debug-iphoneos/AuthPlayground.app"; sourceTree = "<absolute>"; };
+		694D9CE72FE2C56E008B6DFA /* AuthPlayground.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuthPlayground.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,6 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* AuthPlayground */,
+				694D9CE72FE2C56E008B6DFA /* AuthPlayground.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -80,7 +81,7 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 693F0FDA2FCD1239007C635A /* AuthPlayground.app */;
+			productReference = 694D9CE72FE2C56E008B6DFA /* AuthPlayground.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -270,7 +271,7 @@
 				CODE_SIGN_ENTITLEMENTS = AuthPlayground/AuthPlayground.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4QUZ84UWG2;
+				DEVELOPMENT_TEAM = 8U8DA8Q3L6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AuthPlayground/Info.plist;
@@ -284,7 +285,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ferrari.AuthPlayground;
+				PRODUCT_BUNDLE_IDENTIFIER = rodrigoborges.TarefasPOC;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -304,7 +305,7 @@
 				CODE_SIGN_ENTITLEMENTS = AuthPlayground/AuthPlayground.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4QUZ84UWG2;
+				DEVELOPMENT_TEAM = 8U8DA8Q3L6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AuthPlayground/Info.plist;
@@ -318,7 +319,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ferrari.AuthPlayground;
+				PRODUCT_BUNDLE_IDENTIFIER = rodrigoborges.TarefasPOC;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
