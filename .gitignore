@@ -60,9 +60,14 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
-AuthPlayground/GoogleService-Info.plist
+
+# macOS
 .DS_Store
+
+# Xcode state files
 *.xcuserstate
-AuthPlayground/AppConfiguration.swift
-*.xcuserstate
-AuthPlayground/GoogleSignIn-Info.plist
+
+# Arquivos sensíveis — nunca commitar estes arquivos
+JordaniaTeam/GoogleService-Info.plist
+JordaniaTeam/GoogleSignIn-Info.plist
+JordaniaTeam/AppConfiguration.swift
