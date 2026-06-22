@@ -29,12 +29,12 @@ struct UserService {
 // MARK: - DTO
 
 private struct UserMeResponse: Decodable {
-    let userId: UUID
+    let id: UUID
     let name: String?
     let email: String?
     let provider: AuthProvider
 
     func toAuthenticatedUser() -> AuthenticatedUser {
-        AuthenticatedUser(id: userId, name: name, email: email, provider: provider)
+        AuthenticatedUser(id: id, name: name, email: email, provider: provider)
     }
 }
