@@ -70,4 +70,21 @@ final class SessionStore {
         isLoading = false
         authError = error
     }
+    
+    func validateSession(using userService: UserService) async {
+        guard isSignedIn else { return }
+
+        do {
+            let freshUser = try await userService.fetchCurrentUser()
+            // Atualiza silenciosamente — sem interromper a UI
+            currentUser = freshUser
+        } catch NetworkError.unauthorized {
+            // Token rejeitado pelo servidor → desloga
+            signOut()
+        } catch {
+            // Erro de rede, servidor fora → mantém sessão local
+            // Não desloga por falha de conectividade
+            Self.logger.warning("Validação de sessão falhou — mantendo estado local: \(error)")
+        }
+    }
 }
