@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		699C5EA42FEAD6D600CF6A76 /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,7 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* JordaniaTeam */,
-				694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */,
+				699C5EA42FEAD6D600CF6A76 /* JordaniaTeam.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -81,7 +81,7 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */;
+			productReference = 699C5EA42FEAD6D600CF6A76 /* JordaniaTeam.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -144,6 +144,8 @@
 /* Begin XCBuildConfiguration section */
 		693F0FE52FCD123A007C635A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 693F0FDC2FCD1239007C635A /* JordaniaTeam */;
+			baseConfigurationReferenceRelativePath = Config/Debug.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -208,6 +210,8 @@
 		};
 		693F0FE62FCD123A007C635A /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 693F0FDC2FCD1239007C635A /* JordaniaTeam */;
+			baseConfigurationReferenceRelativePath = Config/Release.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -265,6 +269,8 @@
 		};
 		693F0FE82FCD123A007C635A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 693F0FDC2FCD1239007C635A /* JordaniaTeam */;
+			baseConfigurationReferenceRelativePath = Config/Debug.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -299,6 +305,8 @@
 		};
 		693F0FE92FCD123A007C635A /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 693F0FDC2FCD1239007C635A /* JordaniaTeam */;
+			baseConfigurationReferenceRelativePath = Config/Release.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
