@@ -18,12 +18,20 @@ struct JordaniaTeamApp: App {
 
     init() {
         Self.configureGoogleSignIn()
-        let store = SessionStore(persistence: SessionPersistence())
-        let client = APIClient(keychain: KeychainService(), session: .shared, sessionStore: store)
-        self.sessionStore = store
-        self.apiClient = APIClient(keychain: KeychainService(), session: .shared, sessionStore: store)
+
+        let persistence = SessionPersistence()
+        let store = SessionStore(persistence: persistence)
+        let tokenProvider = TokenProvider(
+            persistence: persistence,
+            authService: BackendAuthService(),
+            sessionStore: store
+        )
+        let client = APIClient(tokenProvider: tokenProvider, session: .shared, sessionStore: store)
+
+        self.sessionStore  = store
+        self.apiClient     = client
         self.authViewModel = AuthViewModel(session: store)
-        self.userService = UserService(apiClient: client)
+        self.userService   = UserService(apiClient: client)
     }
 
     var body: some Scene {
@@ -33,8 +41,8 @@ struct JordaniaTeamApp: App {
                     GIDSignIn.sharedInstance.handle(url)
                 }
                 .task {
-                    // validacao em background: confirma que a sessao local ainda é valida no servidor
-                    // a UI ja fica visivel com os dados locais enquanto isso acontece
+                    // Validação em background: confirma que a sessão local ainda é válida no servidor.
+                    // A UI já fica visível com os dados locais enquanto isso acontece.
                     await sessionStore.validateSession(using: userService)
                 }
         }
