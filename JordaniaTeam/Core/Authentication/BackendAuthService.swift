@@ -34,13 +34,10 @@ private struct RefreshRequest: Encodable {
 // MARK: - AuthSession
 
 /// Tripla (identidade + access + refresh) retornada após login ou refresh bem-sucedido.
-/// Os tokens não integram AuthenticatedUser — vivem isolados no Keychain.
 typealias AuthSession = (user: AuthenticatedUser, accessToken: String, refreshToken: String)
 
 // MARK: - BackendAuthService
 
-/// Responsável pelas chamadas de autenticação ao backend.
-/// Não conhece SessionStore, View ou qualquer outro layer.
 struct BackendAuthService {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "BackendAuth")
@@ -67,15 +64,11 @@ struct BackendAuthService {
         )
 
         let session: AuthSessionResponse = try await post(to: url, body: body, requiresAuth: false)
-
         return makeAuthSession(from: session, provider: provider)
     }
 
     // MARK: - Refresh
 
-    /// Troca o refresh token por um novo par (access + refresh).
-    ///
-    /// - Throws: `AuthError.sessionExpired` se o backend retornar 401 — erro terminal, não retrytável.
     func refresh(refreshToken: String) async throws -> AuthSession {
         let url = AppConfiguration.apiBaseURL
             .appendingPathComponent("auth")
@@ -93,8 +86,6 @@ struct BackendAuthService {
 
     // MARK: - Logout
 
-    /// Revoga todos os refresh tokens do usuário no servidor.
-    /// Best-effort: falhas de rede são logadas mas não impedem o logout local.
     func logout(accessToken: String) async {
         let url = AppConfiguration.apiBaseURL
             .appendingPathComponent("auth")
@@ -149,19 +140,29 @@ struct BackendAuthService {
         }
 
         let decoder = JSONDecoder()
+        // Java Instant pode chegar como string ISO8601 (com ou sem nanossegundos)
+        // ou como array [seconds, nanos] dependendo da configuracao do Jackson.
+        // Esta estrategia cobre os dois casos.
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
-            let str = try container.decode(String.self)
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: str) { return date }
-            formatter.formatOptions = [.withInternetDateTime]
-            if let date = formatter.date(from: str) { return date }
+            // Tenta numero (epoch seconds — Jackson padrao sem configuracao)
+            if let epoch = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: epoch)
+            }
+            // Tenta string ISO8601 com e sem fracoes de segundo
+            if let str = try? container.decode(String.self) {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = formatter.date(from: str) { return date }
+                formatter.formatOptions = [.withInternetDateTime]
+                if let date = formatter.date(from: str) { return date }
+            }
             throw DecodingError.dataCorruptedError(
                 in: container,
-                debugDescription: "Data inválida: \(str)"
+                debugDescription: "Formato de data não reconhecido"
             )
         }
+
         do {
             return try decoder.decode(R.self, from: data)
         } catch {
