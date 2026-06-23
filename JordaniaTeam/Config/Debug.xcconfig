@@ -1,8 +1,0 @@
-//
-//  Debug.xcconfig
-//  JordaniaTeam
-//
-//  Created by Gabriel Ferrari on 23/06/26.
-//
-
-API_BASE_URL = http://10.40.57.27:8080

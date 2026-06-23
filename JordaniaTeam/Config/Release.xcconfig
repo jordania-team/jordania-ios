@@ -1,8 +1,0 @@
-//
-//  Release.xcconfig
-//  JordaniaTeam
-//
-//  Created by Gabriel Ferrari on 23/06/26.
-//
-
-API_BASE_URL = https://api.redepets.xyz
