@@ -76,7 +76,11 @@ final class AuthViewModel {
             defer { signInTask = nil }
             do {
                 let authSession = try await operation()
-                session.signIn(user: authSession.user, token: authSession.token)
+                session.signIn(
+                    user: authSession.user,
+                    accessToken: authSession.accessToken,
+                    refreshToken: authSession.refreshToken
+                )
             } catch AuthError.cancelled, NetworkError.cancelled {
                 session.isLoading = false
             } catch let networkError as NetworkError {
