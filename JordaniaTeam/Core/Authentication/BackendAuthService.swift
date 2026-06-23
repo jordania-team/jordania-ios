@@ -87,7 +87,6 @@ struct BackendAuthService {
             let session: AuthSessionResponse = try await post(to: url, body: body, requiresAuth: false)
             return makeAuthSession(from: session, provider: nil)
         } catch NetworkError.unauthorized {
-            // 401 do backend = token revogado ou reuse detectado — não retrytar
             throw AuthError.sessionExpired
         }
     }
@@ -150,7 +149,19 @@ struct BackendAuthService {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: str) { return date }
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: str) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Data inválida: \(str)"
+            )
+        }
         do {
             return try decoder.decode(R.self, from: data)
         } catch {
@@ -164,7 +175,7 @@ struct BackendAuthService {
             id: r.userId,
             name: r.name,
             email: r.email,
-            provider: provider ?? .apple   // provider é nil apenas no refresh; irrelevante para a UI
+            provider: provider ?? .apple
         )
         return (user: user, accessToken: r.token, refreshToken: r.refreshToken)
     }
