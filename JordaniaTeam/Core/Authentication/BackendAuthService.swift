@@ -10,54 +10,45 @@ import OSLog
 
 // MARK: - DTOs
 
-/// Resposta do endpoint POST /auth/login.
-/// O backend valida o identityToken do provider e retorna o JWT interno + dados do usuário.
+/// Resposta de POST /auth/login e POST /auth/refresh.
 private struct AuthSessionResponse: Decodable {
     let token: String
     let userId: UUID
     let name: String?
     let email: String?
+    let refreshToken: String
+    let refreshExpiresAt: Date
 }
 
 private struct LoginRequest: Encodable {
     let provider: String
     let identityToken: String
-    /// nil é omitido do JSON automaticamente — o backend trata ausência como string vazia.
     let name: String?
-    /// Nonce original (pré-SHA256). Obrigatório para Apple Sign In.
     let rawNonce: String?
+}
+
+private struct RefreshRequest: Encodable {
+    let refreshToken: String
 }
 
 // MARK: - AuthSession
 
-/// Par (identidade + token) retornado após login bem-sucedido.
-/// O token não integra AuthenticatedUser — vive isolado no Keychain,
-/// lido exclusivamente pelo APIClient no momento de cada request.
-typealias AuthSession = (user: AuthenticatedUser, token: String)
+/// Tripla (identidade + access + refresh) retornada após login ou refresh bem-sucedido.
+/// Os tokens não integram AuthenticatedUser — vivem isolados no Keychain.
+typealias AuthSession = (user: AuthenticatedUser, accessToken: String, refreshToken: String)
 
 // MARK: - BackendAuthService
 
-/// Responsável exclusivamente pela chamada ao backend de autenticação.
-/// Recebe o identityToken do provider (Apple/Google) e retorna AuthSession.
+/// Responsável pelas chamadas de autenticação ao backend.
 /// Não conhece SessionStore, View ou qualquer outro layer.
-///
-/// Fronteira de erros: transporte/protocolo lança NetworkError (Core/Networking);
-/// rejeição de credenciais lança AuthError (domínio).
 struct BackendAuthService {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "BackendAuth")
-    
+
     nonisolated init() {}
 
-    // MARK: - Public API
+    // MARK: - Login
 
-    /// Troca o identityToken do provider por uma sessão autenticada no backend.
-    ///
-    /// - Parameters:
-    ///   - provider: O provider OAuth usado (.apple ou .google)
-    ///   - identityToken: O JWT emitido pelo provider (Apple: identityToken, Google: idToken)
-    ///   - name: Nome do usuário — obrigatório apenas no primeiro login com Apple
-    ///   - rawNonce: Nonce original (pré-SHA256) — obrigatório para Apple, nil para Google
     func login(
         provider: AuthProvider,
         identityToken: String,
@@ -68,11 +59,6 @@ struct BackendAuthService {
             .appendingPathComponent("auth")
             .appendingPathComponent("login")
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 15
-
         let body = LoginRequest(
             provider: provider.rawValue,
             identityToken: identityToken,
@@ -80,10 +66,69 @@ struct BackendAuthService {
             rawNonce: rawNonce
         )
 
+        let session: AuthSessionResponse = try await post(to: url, body: body, requiresAuth: false)
+
+        return makeAuthSession(from: session, provider: provider)
+    }
+
+    // MARK: - Refresh
+
+    /// Troca o refresh token por um novo par (access + refresh).
+    ///
+    /// - Throws: `AuthError.sessionExpired` se o backend retornar 401 — erro terminal, não retrytável.
+    func refresh(refreshToken: String) async throws -> AuthSession {
+        let url = AppConfiguration.apiBaseURL
+            .appendingPathComponent("auth")
+            .appendingPathComponent("refresh")
+
+        let body = RefreshRequest(refreshToken: refreshToken)
+
+        do {
+            let session: AuthSessionResponse = try await post(to: url, body: body, requiresAuth: false)
+            return makeAuthSession(from: session, provider: nil)
+        } catch NetworkError.unauthorized {
+            // 401 do backend = token revogado ou reuse detectado — não retrytar
+            throw AuthError.sessionExpired
+        }
+    }
+
+    // MARK: - Logout
+
+    /// Revoga todos os refresh tokens do usuário no servidor.
+    /// Best-effort: falhas de rede são logadas mas não impedem o logout local.
+    func logout(accessToken: String) async {
+        let url = AppConfiguration.apiBaseURL
+            .appendingPathComponent("auth")
+            .appendingPathComponent("logout")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+
+        do {
+            _ = try await URLSession.shared.data(for: request)
+        } catch {
+            Self.logger.warning("Logout remoto falhou (aceito): \(error)")
+        }
+    }
+
+    // MARK: - Private helpers
+
+    private func post<B: Encodable, R: Decodable>(
+        to url: URL,
+        body: B,
+        requiresAuth: Bool
+    ) async throws -> R {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+
         do {
             request.httpBody = try JSONEncoder().encode(body)
         } catch {
-            Self.logger.error("Falha ao codificar LoginRequest: \(error)")
+            Self.logger.error("Falha ao codificar request body: \(error)")
             throw NetworkError.encodingError
         }
 
@@ -92,7 +137,7 @@ struct BackendAuthService {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch let urlError as URLError {
-            Self.logger.error("Erro de transporte no login: \(urlError)")
+            Self.logger.error("Erro de transporte: \(urlError)")
             throw NetworkError(from: urlError)
         }
 
@@ -104,39 +149,34 @@ struct BackendAuthService {
             throw mapHTTPError(status: http.statusCode, data: data)
         }
 
-        let sessionResponse: AuthSessionResponse
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         do {
-            sessionResponse = try JSONDecoder().decode(AuthSessionResponse.self, from: data)
+            return try decoder.decode(R.self, from: data)
         } catch {
-            Self.logger.error("Falha ao decodificar AuthSessionResponse: \(error)")
+            Self.logger.error("Falha ao decodificar resposta: \(error)")
             throw NetworkError.decodingError
         }
-
-        let user = AuthenticatedUser(
-            id: sessionResponse.userId,
-            name: sessionResponse.name,
-            email: sessionResponse.email,
-            provider: provider
-        )
-
-        return (user: user, token: sessionResponse.token)
     }
 
-    // MARK: - Error Mapping
+    private func makeAuthSession(from r: AuthSessionResponse, provider: AuthProvider?) -> AuthSession {
+        let user = AuthenticatedUser(
+            id: r.userId,
+            name: r.name,
+            email: r.email,
+            provider: provider ?? .apple   // provider é nil apenas no refresh; irrelevante para a UI
+        )
+        return (user: user, accessToken: r.token, refreshToken: r.refreshToken)
+    }
 
-    /// 4xx de credencial vira AuthError (domínio); o resto vira NetworkError (protocolo).
-    /// O corpo de erro do Spring vai para o log, nunca para a UI.
     private func mapHTTPError(status: Int, data: Data) -> Error {
         let detail = String(data: data, encoding: .utf8) ?? "<corpo vazio>"
-        Self.logger.error("Login falhou com status \(status): \(detail, privacy: .private)")
+        Self.logger.error("Request falhou com status \(status): \(detail, privacy: .private)")
 
         switch status {
-        case 401, 403:
-            return AuthError.failed("Não foi possível validar suas credenciais. Tente novamente.")
-        case 400, 422:
-            return AuthError.failed("Dados de login inválidos. Tente novamente.")
-        default:
-            return NetworkError.serverError(statusCode: status)
+        case 401, 403: return NetworkError.unauthorized
+        case 400, 422: return AuthError.failed("Dados inválidos. Tente novamente.")
+        default:       return NetworkError.serverError(statusCode: status)
         }
     }
 }

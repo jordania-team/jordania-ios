@@ -43,11 +43,11 @@ final class SessionStore {
 
     // MARK: - Actions
 
-    func signIn(user: AuthenticatedUser, token: String) {
+    func signIn(user: AuthenticatedUser, accessToken: String, refreshToken: String) {
         isLoading = false
         authError = nil
         do {
-            try persistence.save(user: user, token: token)
+            try persistence.save(user: user, accessToken: accessToken, refreshToken: refreshToken)
             currentUser = user
         } catch {
             authError = .failed("Não foi possível salvar a sessão com segurança.")
@@ -70,20 +70,16 @@ final class SessionStore {
         isLoading = false
         authError = error
     }
-    
+
     func validateSession(using userService: UserService) async {
         guard isSignedIn else { return }
 
         do {
             let freshUser = try await userService.fetchCurrentUser()
-            // Atualiza silenciosamente — sem interromper a UI
             currentUser = freshUser
         } catch NetworkError.unauthorized {
-            // Token rejeitado pelo servidor → desloga
             signOut()
         } catch {
-            // Erro de rede, servidor fora → mantém sessão local
-            // Não desloga por falha de conectividade
             Self.logger.warning("Validação de sessão falhou — mantendo estado local: \(error)")
         }
     }

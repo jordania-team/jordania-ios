@@ -7,21 +7,33 @@
 
 import Foundation
 
-/// Leitura local de claims do JWT — apenas para decisões de UX (ex: não restaurar
-/// sessão expirada no launch). A validação real de assinatura é sempre do backend.
+/// Leitura local de claims do JWT — apenas para decisões de UX (ex: refresh proativo antes de expirar).
+/// A validação real de assinatura é sempre do backend.
 enum JWT {
 
-    /// Margem de segurança: token a segundos de expirar é tratado como expirado,
+    /// Margem de segurança: token a menos de 30 s de expirar é tratado como expirado,
     /// evitando 401 na primeira chamada após o launch.
     private static let expirationLeeway: TimeInterval = 30
 
+    /// Retorna true se o token já expirou (com leeway de 30 s).
     static func isExpired(_ token: String) -> Bool {
-        guard let expiration = expirationDate(of: token) else {
-            // Token ilegível = inválido. Falha fechada, nunca aberta.
-            return true
-        }
+        guard let expiration = expirationDate(of: token) else { return true }
         return expiration.timeIntervalSinceNow < expirationLeeway
     }
+
+    /// Retorna true se o token expira dentro de `skew` segundos.
+    ///
+    /// Usado para refresh proativo: o TokenProvider dispara o refresh antes que o
+    /// access token expire, eliminando 401 em chamadas paralelas.
+    ///
+    /// - Parameter skew: margem configuravel; default 600 s (10 min).
+    ///   Não tratar o exp local como autoridade absoluta — o backend valida a assinatura.
+    static func needsRefresh(_ token: String, skew: TimeInterval = 600) -> Bool {
+        guard let expiration = expirationDate(of: token) else { return true }
+        return expiration.timeIntervalSinceNow < skew
+    }
+
+    // MARK: - Private
 
     private static func expirationDate(of token: String) -> Date? {
         let segments = token.split(separator: ".")
