@@ -14,3 +14,13 @@ enum AuthError: Error {
     /// Erro terminal: não retrytar, deslogar imediatamente.
     case sessionExpired
 }
+
+extension AuthError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .failed(let message): return message
+        case .cancelled:           return nil
+        case .sessionExpired:      return "Sua sessão expirou. Faça login novamente."
+        }
+    }
+}
