@@ -16,7 +16,8 @@ struct TasksView: View {
     init(apiClient: APIClient, onSignOut: @escaping () -> Void) {
         _viewModel = State(
             initialValue: TasksViewModel(
-                service: TasksService(apiClient: apiClient)
+                service: TasksService(apiClient: apiClient),
+                apiClient: apiClient
             )
         )
         self.onSignOut = onSignOut
@@ -40,12 +41,25 @@ struct TasksView: View {
                         .padding(.horizontal)
                 }
 
+                // TODO: remover após validar o refresh token
+                if let pingResult = viewModel.pingResult {
+                    Text(pingResult)
+                        .font(.footnote)
+                        .foregroundStyle(pingResult.hasPrefix("✅") ? .green : .red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
                 taskList
             }
             .padding()
             .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    // TODO: remover após validar o refresh token
+                    Button("Ping /me") {
+                        Task { await viewModel.pingMe() }
+                    }
                     Button("Reload") {
                         Task { await viewModel.loadTasks() }
                     }

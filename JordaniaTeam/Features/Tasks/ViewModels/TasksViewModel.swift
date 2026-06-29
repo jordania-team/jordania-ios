@@ -21,10 +21,28 @@ final class TasksViewModel {
     var errorMessage: String?
     var isLoading: Bool = false
 
-    private let service: TasksService
+    // TODO: remover após validar o refresh token
+    var pingResult: String?
 
-    init(service: TasksService) {
+    private let service: TasksService
+    private let apiClient: APIClient
+
+    init(service: TasksService, apiClient: APIClient) {
         self.service = service
+        self.apiClient = apiClient
+    }
+
+    // TODO: remover após validar o refresh token
+    func pingMe() async {
+        pingResult = nil
+        do {
+            let user: AuthenticatedUser = try await apiClient.get("users/me")
+            pingResult = "✅ /users/me OK — \(user.email ?? user.id.uuidString)"
+            Self.logger.info("pingMe OK: userId=\(user.id)")
+        } catch {
+            pingResult = "❌ /users/me falhou: \(error)"
+            Self.logger.error("pingMe falhou: \(error)")
+        }
     }
 
     func loadTasks() async {
