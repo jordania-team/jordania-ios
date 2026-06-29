@@ -9,17 +9,16 @@ import Foundation
 import OSLog
 import Security
 
-/// Persiste e recupera a sessão do usuário e o JWT no Keychain do iOS.
-/// Dois itens distintos: sessão (identidade) e token (credencial).
-/// O JWT nunca transita por modelos de domínio ou memória da UI.
+/// Persiste e recupera a sessão do usuário, o access JWT e o refresh token no Keychain do iOS.
 struct KeychainService {
 
     private let logger = Logger(subsystem: "app.jordania", category: "Keychain")
     private let service = "app.jordania.auth"
 
     private enum Account: String {
-        case session = "current-session"
-        case accessToken = "access-token"
+        case session      = "current-session"
+        case accessToken  = "access-token"
+        case refreshToken = "refresh-token"
     }
 
     // MARK: - Session (AuthenticatedUser sem token)
@@ -32,7 +31,7 @@ struct KeychainService {
         load(type: AuthenticatedUser.self, account: .session)
     }
 
-    // MARK: - Token (JWT isolado)
+    // MARK: - Access Token
 
     func saveToken(_ token: String) throws {
         guard let data = token.data(using: .utf8) else {
@@ -46,12 +45,27 @@ struct KeychainService {
         return String(data: data, encoding: .utf8)
     }
 
+    // MARK: - Refresh Token
+
+    func saveRefreshToken(_ token: String) throws {
+        guard let data = token.data(using: .utf8) else {
+            throw AuthError.failed("Refresh token inválido.")
+        }
+        try saveRaw(data: data, account: .refreshToken)
+    }
+
+    func loadRefreshToken() -> String? {
+        guard let data = loadRaw(account: .refreshToken) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     // MARK: - Clear
 
-    /// Remove sessão e token. Item inexistente não é erro.
+    /// Remove sessão, access token e refresh token. Item inexistente não é erro.
     func clearAll() throws {
         try delete(account: .session)
         try delete(account: .accessToken)
+        try delete(account: .refreshToken)
     }
 
     // MARK: - Private primitives

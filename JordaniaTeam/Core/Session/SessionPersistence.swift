@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// Responsável exclusivamente por ler e escrever sessão e JWT via Keychain.
-/// A SessionStore delega persistência para cá, sem conhecer Security framework diretamente.
+/// Responsável exclusivamente por ler e escrever sessão, access token e refresh token via Keychain.
+/// A SessionStore e o TokenProvider delegam persistência para cá.
 final class SessionPersistence {
 
     private let keychain: KeychainService
@@ -19,8 +19,9 @@ final class SessionPersistence {
 
     // MARK: - Public API
 
-    /// Retorna a sessão persistida se o token ainda for válido.
-    /// Token expirado remove tudo do Keychain — o usuário fará login novamente.
+    /// Retorna a sessão persistida se o access token ainda for válido.
+    /// Token expirado remove tudo do Keychain — o usuário fará login novamente
+    /// (ou o TokenProvider fará refresh proativo antes de chegar aqui).
     func loadSession() -> AuthenticatedUser? {
         guard let user = keychain.loadSession() else { return nil }
         guard let token = keychain.loadToken(), !JWT.isExpired(token) else {
@@ -30,9 +31,20 @@ final class SessionPersistence {
         return user
     }
 
-    func save(user: AuthenticatedUser, token: String) throws {
+    func loadAccessToken() -> String? {
+        keychain.loadToken()
+    }
+
+    func loadRefreshToken() -> String? {
+        keychain.loadRefreshToken()
+    }
+
+    /// Salva usuário, access token e refresh token.
+    /// A persistência é sequencial; qualquer falha lança e deixa o chamador decidir.
+    func save(user: AuthenticatedUser, accessToken: String, refreshToken: String) throws {
         try keychain.saveSession(user)
-        try keychain.saveToken(token)
+        try keychain.saveToken(accessToken)
+        try keychain.saveRefreshToken(refreshToken)
     }
 
     func clearAll() throws {
