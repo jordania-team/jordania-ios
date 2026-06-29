@@ -36,7 +36,13 @@ final class TasksViewModel {
     func pingMe() async {
         pingResult = nil
         do {
-            let user: AuthenticatedUser = try await apiClient.get("users/me")
+            let url = AppConfiguration.apiBaseURL
+                .appendingPathComponent("users")
+                .appendingPathComponent("me")
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            let data = try await apiClient.perform(request)
+            let user = try JSONDecoder().decode(AuthenticatedUser.self, from: data)
             pingResult = "✅ /users/me OK — \(user.email ?? user.id.uuidString)"
             Self.logger.info("pingMe OK: userId=\(user.id)")
         } catch {
