@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		69A784842FEECDD3001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,7 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* JordaniaTeam */,
-				694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */,
+				69A784842FEECDD3001905DC /* JordaniaTeam.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -81,7 +81,7 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */;
+			productReference = 69A784842FEECDD3001905DC /* JordaniaTeam.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -92,7 +92,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2650;
-				LastUpgradeCheck = 2650;
+				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					693F0FD92FCD1239007C635A = {
 						CreatedOnToolsVersion = 26.5;
@@ -201,6 +201,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -258,6 +259,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

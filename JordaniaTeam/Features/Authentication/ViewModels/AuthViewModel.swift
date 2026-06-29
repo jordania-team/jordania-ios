@@ -16,7 +16,8 @@ import Observation
 final class AuthViewModel {
 
     // MARK: - Dependencies
-
+    var isLoading: Bool = false
+    var errorMessage: String? = nil
     private var signInTask: Task<Void, Never>?
     private let session: SessionStore
     private let appleAuthService: AppleAuthService
@@ -71,9 +72,12 @@ final class AuthViewModel {
     /// Cancelamentos (usuário ou Task) são silenciosos; o resto vira mensagem na UI.
     private func performSignIn(_ operation: @escaping () async throws -> AuthSession) {
         guard signInTask == nil else { return }
-        session.isLoading = true
+        isLoading = true
         signInTask = Task {
-            defer { signInTask = nil }
+            defer {
+                isLoading = false
+                signInTask = nil
+            }
             do {
                 let authSession = try await operation()
                 session.signIn(
@@ -82,12 +86,11 @@ final class AuthViewModel {
                     refreshToken: authSession.refreshToken
                 )
             } catch AuthError.cancelled, NetworkError.cancelled {
-                session.isLoading = false
+                // silencioso
             } catch let networkError as NetworkError {
-                let message = networkError.errorDescription ?? "Não foi possível concluir o login. Tente novamente."
-                session.setError(.failed(message))
+                errorMessage = networkError.errorDescription ?? "Não foi possível concluir o login. Tente novamente."
             } catch {
-                session.setError(.failed("Não foi possível concluir o login. Tente novamente."))
+                errorMessage = "Não foi possível concluir o login. Tente novamente."
             }
         }
     }

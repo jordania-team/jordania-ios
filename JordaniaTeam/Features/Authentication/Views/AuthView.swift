@@ -50,11 +50,9 @@ struct AuthView: View {
 
     private var authButtonsSection: some View {
         VStack(spacing: 12) {
-            if session.isLoading {
+            if viewModel.isLoading {
                 ProgressView()
                     .controlSize(.large)
-                    // reserva a altura dos dois botões + spacing para evitar layout shift
-                    // quando o loading aparece/desaparece.
                     .frame(height: BrandSpacing.buttonHeight * 2 + 12)
             } else {
                 AppleSignInButton(
@@ -67,11 +65,9 @@ struct AuthView: View {
                 }
             }
 
-            if let error = session.authError {
-                Text(error.localizedDescription)
+            if let error = viewModel.errorMessage {
+                Text(error)
                     .font(.footnote)
-                    // TODO: substituir por cor semântica de erro em BrandColors
-                    // (ex.: BrandColors.error) com contraste validado em light e dark mode.
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
