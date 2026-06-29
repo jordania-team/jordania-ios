@@ -6,6 +6,7 @@
 import Foundation
 import OSLog
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -35,6 +36,12 @@ final class TutorViewModel {
     var tutorGetBody: String = "<empty>"
     var tutorPutStatus: String = "not run"
     var tutorPutBody: String = "<empty>"
+    var profileImageUploadStatus: String = "not run"
+    var profileImageUploadBody: String = "<empty>"
+    var profileImageDeleteStatus: String = "not run"
+    var profileImageDeleteBody: String = "<empty>"
+    var profileImageSelectionStatus: String = "none"
+    var selectedProfileImage: UIImage?
     var refreshStatus: String = "not run"
     var refreshBody: String = "<empty>"
     var refreshOldAccessToken: String = "<none>"
@@ -47,6 +54,10 @@ final class TutorViewModel {
     var isLoading: Bool = false
     var isSaving: Bool = false
     var isDebugActionRunning: Bool = false
+    var isProfileImageActionRunning: Bool = false
+
+    private let maxProfileImageUploadBytes = 5 * 1024 * 1024
+    private var selectedProfileImageUploadData: Data?
 
     var putPreviewJSON: String {
         jsonPreview(
@@ -58,6 +69,24 @@ final class TutorViewModel {
                 birthday: optionalTrimmed(birthday)
             )
         )
+    }
+
+    var profileImageDisplayURL: URL? {
+        guard
+            let value = currentTutor?.imgURL,
+            !value.isEmpty
+        else {
+            return nil
+        }
+        return URL(string: value)
+    }
+
+    var profileImageDisplayURLString: String {
+        currentTutor?.imgURL ?? "null"
+    }
+
+    var canUploadSelectedProfileImage: Bool {
+        selectedProfileImageUploadData != nil && !isProfileImageActionRunning
     }
 
     private let session: SessionStore
@@ -213,6 +242,138 @@ final class TutorViewModel {
         isSaving = false
     }
 
+    func prepareSelectedProfileImage(data: Data) {
+        errorMessage = nil
+        successMessage = nil
+
+        guard let image = UIImage(data: data) else {
+            selectedProfileImage = nil
+            selectedProfileImageUploadData = nil
+            profileImageSelectionStatus = "invalid image data"
+            errorMessage = "Não foi possível ler a imagem selecionada."
+            return
+        }
+
+        guard let uploadData = jpegDataForUpload(from: image) else {
+            selectedProfileImage = nil
+            selectedProfileImageUploadData = nil
+            profileImageSelectionStatus = "could not encode JPEG"
+            errorMessage = "Não foi possível preparar a imagem para upload."
+            return
+        }
+
+        guard uploadData.count <= maxProfileImageUploadBytes else {
+            selectedProfileImage = nil
+            selectedProfileImageUploadData = nil
+            profileImageSelectionStatus = "\(formattedByteCount(uploadData.count)) > 5 MB"
+            errorMessage = "A imagem ficou maior que 5 MB mesmo após compressão."
+            return
+        }
+
+        selectedProfileImage = UIImage(data: uploadData)
+        selectedProfileImageUploadData = uploadData
+        profileImageSelectionStatus = "JPEG \(formattedByteCount(uploadData.count))"
+    }
+
+    func clearSelectedProfileImage() {
+        selectedProfileImage = nil
+        selectedProfileImageUploadData = nil
+        profileImageSelectionStatus = "none"
+    }
+
+    func failProfileImageSelection(_ error: Error) {
+        selectedProfileImage = nil
+        selectedProfileImageUploadData = nil
+        profileImageSelectionStatus = "selection error"
+        errorMessage = "Falha ao carregar imagem selecionada: \(String(describing: error))"
+        successMessage = nil
+    }
+
+    func uploadSelectedProfileImage() async {
+        guard let imageData = selectedProfileImageUploadData else {
+            errorMessage = "Selecione uma imagem antes de fazer upload."
+            successMessage = nil
+            return
+        }
+
+        isProfileImageActionRunning = true
+        errorMessage = nil
+        successMessage = nil
+        lastRequestDebug = """
+        POST /api/tutors/me/profile-image
+        body: multipart/form-data; field=file; filename=profile-image.jpg; bytes=\(imageData.count)
+        """
+
+        do {
+            let result = try await service.uploadProfileImageDebug(
+                imageData: imageData,
+                filename: "profile-image.jpg",
+                mimeType: "image/jpeg"
+            )
+            profileImageUploadStatus = "HTTP \(result.statusCode)"
+            profileImageUploadBody = bodyText(result.body)
+            if let tutor = result.value {
+                apply(tutor)
+                successMessage = "Foto de perfil enviada."
+            } else {
+                errorMessage = "POST /api/tutors/me/profile-image -> HTTP \(result.statusCode)"
+            }
+        } catch let error as HTTPStatusError {
+            Self.logger.error("uploadProfileImage falhou: \(error.debugMessage, privacy: .public)")
+            profileImageUploadStatus = "error"
+            profileImageUploadBody = error.debugMessage
+            errorMessage = error.debugMessage
+        } catch let error as NetworkError {
+            Self.logger.error("uploadProfileImage falhou: \(error)")
+            profileImageUploadStatus = "error"
+            profileImageUploadBody = String(describing: error)
+            errorMessage = tutorMessage(for: error, operation: "POST /api/tutors/me/profile-image")
+        } catch {
+            Self.logger.error("uploadProfileImage erro inesperado: \(error)")
+            profileImageUploadStatus = "error"
+            profileImageUploadBody = String(describing: error)
+            errorMessage = "Não foi possível enviar a foto de perfil."
+        }
+
+        isProfileImageActionRunning = false
+    }
+
+    func deleteProfileImage() async {
+        isProfileImageActionRunning = true
+        errorMessage = nil
+        successMessage = nil
+        lastRequestDebug = "DELETE /api/tutors/me/profile-image\nbody: <empty>"
+
+        do {
+            let result = try await service.deleteProfileImageDebug()
+            profileImageDeleteStatus = "HTTP \(result.statusCode)"
+            profileImageDeleteBody = bodyText(result.body)
+            if let tutor = result.value {
+                apply(tutor)
+                successMessage = "Foto de perfil removida."
+            } else {
+                errorMessage = "DELETE /api/tutors/me/profile-image -> HTTP \(result.statusCode)"
+            }
+        } catch let error as HTTPStatusError {
+            Self.logger.error("deleteProfileImage falhou: \(error.debugMessage, privacy: .public)")
+            profileImageDeleteStatus = "error"
+            profileImageDeleteBody = error.debugMessage
+            errorMessage = error.debugMessage
+        } catch let error as NetworkError {
+            Self.logger.error("deleteProfileImage falhou: \(error)")
+            profileImageDeleteStatus = "error"
+            profileImageDeleteBody = String(describing: error)
+            errorMessage = tutorMessage(for: error, operation: "DELETE /api/tutors/me/profile-image")
+        } catch {
+            Self.logger.error("deleteProfileImage erro inesperado: \(error)")
+            profileImageDeleteStatus = "error"
+            profileImageDeleteBody = String(describing: error)
+            errorMessage = "Não foi possível remover a foto de perfil."
+        }
+
+        isProfileImageActionRunning = false
+    }
+
     func forceRefresh() async {
         isDebugActionRunning = true
         errorMessage = nil
@@ -302,7 +463,7 @@ final class TutorViewModel {
         name = tutor.name
         username = tutor.username
         isPrivate = tutor.isPrivate
-        imgURL = tutor.imgURL ?? ""
+        imgURL = ""
         birthday = tutor.birthday ?? ""
         updatedAt = tutor.updatedAt
         reportsCounter = tutor.reportsCounter
@@ -369,6 +530,45 @@ final class TutorViewModel {
         throw TutorFormValidationError.invalidBirthday
     }
 
+    private func jpegDataForUpload(from image: UIImage) -> Data? {
+        let image = resizedImageForUpload(image)
+        let qualities: [CGFloat] = [0.9, 0.8, 0.7, 0.6, 0.5]
+
+        var smallestData: Data?
+        for quality in qualities {
+            guard let data = image.jpegData(compressionQuality: quality) else { continue }
+            smallestData = data
+            if data.count <= maxProfileImageUploadBytes {
+                return data
+            }
+        }
+
+        return smallestData
+    }
+
+    private func resizedImageForUpload(_ image: UIImage) -> UIImage {
+        let maxDimension: CGFloat = 1_600
+        let size = image.size
+        guard size.width > 0, size.height > 0 else {
+            return image
+        }
+
+        let largestDimension = max(size.width, size.height)
+        let scale = min(1, maxDimension / largestDimension)
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let bounds = CGRect(origin: .zero, size: targetSize)
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { context in
+            context.cgContext.setFillColor(UIColor.white.cgColor)
+            context.cgContext.fill(bounds)
+            image.draw(in: bounds)
+        }
+    }
+
     private func jsonPreview(for request: UpsertTutorRequest) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -384,6 +584,10 @@ final class TutorViewModel {
     private func bodyText(_ body: String?) -> String {
         guard let body, !body.isEmpty else { return "<empty>" }
         return body
+    }
+
+    private func formattedByteCount(_ count: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .file)
     }
 
     private func tutorMessage(for error: NetworkError, operation: String) -> String {

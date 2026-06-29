@@ -4,10 +4,12 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct TutorView: View {
 
     @State private var viewModel: TutorViewModel
+    @State private var selectedProfileImageItem: PhotosPickerItem?
     private let session: SessionStore
     private let onSignOut: () -> Void
 
@@ -33,6 +35,7 @@ struct TutorView: View {
                     refreshTokenPanel
                     usersMePanel
                     tutorForm
+                    profileImagePanel
                     tutorMetadata
                     requestDebugPanel
                     refreshDebugPanel
@@ -51,7 +54,7 @@ struct TutorView: View {
                             await viewModel.loadTutor()
                         }
                     }
-                    .disabled(viewModel.isLoading || viewModel.isSaving || viewModel.isDebugActionRunning)
+                    .disabled(viewModel.isLoading || viewModel.isSaving || viewModel.isDebugActionRunning || viewModel.isProfileImageActionRunning)
 
                     Button("Sign Out", role: .destructive, action: onSignOut)
                 }
@@ -158,12 +161,12 @@ struct TutorView: View {
 
             Toggle("is_private", isOn: $viewModel.isPrivate)
 
-            TextField("img_url", text: $viewModel.imgURL)
+            TextField("img_url override", text: $viewModel.imgURL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .textFieldStyle(.roundedBorder)
-            Text("https://example.com/avatar.png")
+            Text("Optional legacy URL; empty preserves the current S3 image.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -193,6 +196,113 @@ struct TutorView: View {
 
             DebugRow(label: "last PUT", value: viewModel.tutorPutStatus)
             DebugBlock(title: "PUT raw body", value: viewModel.tutorPutBody)
+        }
+    }
+
+    private var profileImagePanel: some View {
+        DebugPanel(title: "Profile image S3") {
+            profileImagePreview
+
+            HStack {
+                PhotosPicker(
+                    selection: $selectedProfileImageItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Label("Choose", systemImage: "photo")
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProfileImageActionRunning)
+
+                Button {
+                    Task { await viewModel.uploadSelectedProfileImage() }
+                } label: {
+                    if viewModel.isProfileImageActionRunning {
+                        ProgressView()
+                    } else {
+                        Label("Upload", systemImage: "arrow.up.circle")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canUploadSelectedProfileImage)
+
+                Button(role: .destructive) {
+                    Task { await viewModel.deleteProfileImage() }
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProfileImageActionRunning || viewModel.profileImageDisplayURL == nil)
+            }
+            .onChange(of: selectedProfileImageItem) { _, newItem in
+                Task { await loadSelectedProfileImage(newItem) }
+            }
+
+            DebugRow(label: "selected", value: viewModel.profileImageSelectionStatus)
+            DebugRow(label: "img_url", value: viewModel.profileImageDisplayURLString)
+            DebugRow(label: "upload", value: viewModel.profileImageUploadStatus)
+            DebugBlock(title: "upload raw body", value: viewModel.profileImageUploadBody)
+            DebugRow(label: "delete", value: viewModel.profileImageDeleteStatus)
+            DebugBlock(title: "delete raw body", value: viewModel.profileImageDeleteBody)
+        }
+    }
+
+    @ViewBuilder
+    private var profileImagePreview: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("S3")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let url = viewModel.profileImageDisplayURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 96, height: 96)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 96, height: 96)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        case .failure:
+                            Image(systemName: "exclamationmark.triangle")
+                                .frame(width: 96, height: 96)
+                                .background(.thinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        @unknown default:
+                            EmptyView()
+                                .frame(width: 96, height: 96)
+                        }
+                    }
+                } else {
+                    Image(systemName: "person.crop.square")
+                        .frame(width: 96, height: 96)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let image = viewModel.selectedProfileImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 96, height: 96)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Image(systemName: "photo")
+                        .frame(width: 96, height: 96)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
         }
     }
 
@@ -337,6 +447,23 @@ struct TutorView: View {
             return "\(version) (\(build))"
         }
         return version ?? build ?? "unknown"
+    }
+
+    private func loadSelectedProfileImage(_ item: PhotosPickerItem?) async {
+        guard let item else {
+            viewModel.clearSelectedProfileImage()
+            return
+        }
+
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                viewModel.prepareSelectedProfileImage(data: data)
+            } else {
+                viewModel.clearSelectedProfileImage()
+            }
+        } catch {
+            viewModel.failProfileImageSelection(error)
+        }
     }
 
     private func format(_ date: Date?) -> String {

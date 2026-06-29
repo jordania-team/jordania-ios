@@ -119,10 +119,57 @@ final class TutorsService {
         )
     }
 
+    func uploadProfileImageDebug(
+        imageData: Data,
+        filename: String,
+        mimeType: String
+    ) async throws -> HTTPDecodedResult<TutorProfile?> {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = buildRequest(url: profileImageURL(), method: "POST")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = multipartBody(
+            boundary: boundary,
+            fieldName: "file",
+            filename: filename,
+            mimeType: mimeType,
+            fileData: imageData
+        )
+
+        let result = try await apiClient.performDebug(request)
+
+        guard (200...299).contains(result.statusCode) else {
+            return HTTPDecodedResult(statusCode: result.statusCode, body: result.body, value: nil)
+        }
+
+        return HTTPDecodedResult(
+            statusCode: result.statusCode,
+            body: result.body,
+            value: Optional(try decode(TutorProfile.self, from: result.data))
+        )
+    }
+
+    func deleteProfileImageDebug() async throws -> HTTPDecodedResult<TutorProfile?> {
+        let result = try await apiClient.performDebug(buildRequest(url: profileImageURL(), method: "DELETE"))
+
+        guard (200...299).contains(result.statusCode) else {
+            return HTTPDecodedResult(statusCode: result.statusCode, body: result.body, value: nil)
+        }
+
+        return HTTPDecodedResult(
+            statusCode: result.statusCode,
+            body: result.body,
+            value: Optional(try decode(TutorProfile.self, from: result.data))
+        )
+    }
+
     private func tutorURL() -> URL {
         baseURL
             .appendingPathComponent("tutors")
             .appendingPathComponent("me")
+    }
+
+    private func profileImageURL() -> URL {
+        tutorURL().appendingPathComponent("profile-image")
     }
 
     private func buildRequest(url: URL, method: String) -> URLRequest {
@@ -137,5 +184,27 @@ final class TutorsService {
         } catch {
             throw NetworkError.decodingError
         }
+    }
+
+    private func multipartBody(
+        boundary: String,
+        fieldName: String,
+        filename: String,
+        mimeType: String,
+        fileData: Data
+    ) -> Data {
+        var body = Data()
+        body.appendUTF8("--\(boundary)\r\n")
+        body.appendUTF8("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n")
+        body.appendUTF8("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(fileData)
+        body.appendUTF8("\r\n--\(boundary)--\r\n")
+        return body
+    }
+}
+
+private extension Data {
+    mutating func appendUTF8(_ string: String) {
+        append(Data(string.utf8))
     }
 }

@@ -20,6 +20,9 @@ Esta POC prioriza observabilidade. Depois do login Apple/Google, a tela autentic
 - `GET /users/me`.
 - `GET /api/tutors/me`.
 - `PUT /api/tutors/me`.
+- `POST /api/tutors/me/profile-image` com multipart autenticado.
+- `DELETE /api/tutors/me/profile-image`.
+- Exibição de `img_url` retornado pela API como URL S3/presigned URL temporária.
 - Testes negativos para refresh inválido e request protegida sem token.
 
 ## Como Rodar
@@ -41,6 +44,7 @@ A tela autenticada mostra:
 - `Refresh token`: presença, expiração e valor mascarado.
 - `/users/me`: botão de carga, status HTTP, body bruto e DTO decodificado.
 - `PUT /api/tutors/me`: formulário, preview JSON, status e body.
+- `Profile image S3`: seletor de imagem, preview local, upload, delete, render da URL retornada e bodies brutos.
 - `GET /api/tutors/me`: status/body; `404` é esperado antes de criar tutor.
 - `Refresh`: botão de refresh manual com tokens antigos/novos mascarados.
 - `Negative tests`: refresh inválido e `/users/me` sem token.
@@ -55,10 +59,15 @@ Os blocos de debug usam seleção de texto para facilitar copiar payloads e clai
 3. Clique em `Load /users/me` e confirme `HTTP 200`.
 4. Clique em `GET tutor`; antes de criar tutor, `HTTP 404` é um estado válido.
 5. Preencha `name` e `username`, confira o preview JSON e salve com `PUT /api/tutors/me`.
-6. Clique em `Force refresh` e confirme que access e refresh mascarados mudaram.
-7. Rode `Invalid refresh` e confirme `HTTP 401`.
-8. Rode `/users/me no token` e confirme `HTTP 401/403`.
-9. Faça `Sign Out` e confirme que o app volta ao login.
+6. Em `Profile image S3`, escolha uma imagem e confirme que o preview local mostra um JPEG abaixo de 5 MB.
+7. Clique em `Upload` e confirme `HTTP 200`, `img_url` no body bruto e imagem renderizada no preview S3.
+8. Clique em `GET tutor` e confirme que a imagem continua renderizando a partir do `img_url` retornado.
+9. Altere um campo do tutor e salve com `PUT /api/tutors/me`; o campo `img_url override` deve ficar vazio para preservar a imagem S3.
+10. Clique em `Delete` e confirme `HTTP 200`, `img_url: null` no body bruto e preview S3 vazio.
+11. Clique em `Force refresh` e confirme que access e refresh mascarados mudaram.
+12. Rode `Invalid refresh` e confirme `HTTP 401`.
+13. Rode `/users/me no token` e confirme `HTTP 401/403`.
+14. Faça `Sign Out` e confirme que o app volta ao login.
 
 ## Validação De Build
 
