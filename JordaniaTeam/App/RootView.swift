@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// Ponto de entrada da navegação.
-/// Decide entre tela de login e tela de tarefas com base no estado da sessão.
+/// Decide entre tela de login e tela autenticada de Tutor com base no estado da sessão.
 struct RootView: View {
 
     let sessionStore: SessionStore
@@ -17,7 +17,8 @@ struct RootView: View {
 
     var body: some View {
         if sessionStore.isSignedIn {
-            TasksView(
+            TutorView(
+                session: sessionStore,
                 apiClient: apiClient,
                 onSignOut: { authViewModel.signOut() }
             )

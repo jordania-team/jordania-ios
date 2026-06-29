@@ -10,8 +10,7 @@ import OSLog
 import Security
 
 /// Persiste e recupera a sessão do usuário e o JWT no Keychain do iOS.
-/// Dois itens distintos: sessão (identidade) e token (credencial).
-/// O JWT nunca transita por modelos de domínio ou memória da UI.
+/// Dois itens distintos: sessão (identidade) e credenciais (access + refresh).
 struct KeychainService {
 
     private let logger = Logger(subsystem: "app.jordania", category: "Keychain")
@@ -19,7 +18,8 @@ struct KeychainService {
 
     private enum Account: String {
         case session = "current-session"
-        case accessToken = "access-token"
+        case credentials = "session-credentials"
+        case legacyAccessToken = "access-token"
     }
 
     // MARK: - Session (AuthenticatedUser sem token)
@@ -32,18 +32,22 @@ struct KeychainService {
         load(type: AuthenticatedUser.self, account: .session)
     }
 
-    // MARK: - Token (JWT isolado)
+    // MARK: - Credentials
 
-    func saveToken(_ token: String) throws {
-        guard let data = token.data(using: .utf8) else {
-            throw AuthError.failed("Token inválido.")
-        }
-        try saveRaw(data: data, account: .accessToken)
+    func saveCredentials(_ credentials: SessionCredentials) throws {
+        try save(Codable: credentials, account: .credentials)
     }
 
-    func loadToken() -> String? {
-        guard let data = loadRaw(account: .accessToken) else { return nil }
-        return String(data: data, encoding: .utf8)
+    func loadCredentials() -> SessionCredentials? {
+        load(type: SessionCredentials.self, account: .credentials)
+    }
+
+    func hasCredentials() -> Bool {
+        loadRaw(account: .credentials) != nil
+    }
+
+    func hasLegacyAccessToken() -> Bool {
+        loadRaw(account: .legacyAccessToken) != nil
     }
 
     // MARK: - Clear
@@ -51,7 +55,8 @@ struct KeychainService {
     /// Remove sessão e token. Item inexistente não é erro.
     func clearAll() throws {
         try delete(account: .session)
-        try delete(account: .accessToken)
+        try delete(account: .credentials)
+        try delete(account: .legacyAccessToken)
     }
 
     // MARK: - Private primitives

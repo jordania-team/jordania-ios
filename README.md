@@ -1,107 +1,67 @@
-# Auth Playground — iOS
+# TarefasPOC — Debug Access + Refresh Token
 
-Laboratório de autenticação iOS com múltiplos providers, construído em SwiftUI com mentalidade Apple-first.
+POC iOS em SwiftUI para validar o fluxo real do backend publicado em:
 
-> Objetivo: validar a complexidade real de suportar mais de um provider de autenticação em um app iOS nativo, antes de implementar no produto principal.
-
----
-
-## Stack
-
-| Camada | Tecnologia |
-|---|---|
-| Linguagem | Swift 5.10+ |
-| UI | SwiftUI |
-| Plataforma | iOS 17+ |
-| Auth Apple | AuthenticationServices |
-| Auth Google | GoogleSignIn SDK |
-| Persistência | SwiftData (POC 3) |
-
----
-
-## Pré-requisitos
-
-- Xcode 16+
-- iOS 17+ (simulador ou device)
-- Conta Apple Developer (para Sign in with Apple)
-
----
-
-## Configuração local
-
-### 1. Clonar o repositório
-
-```bash
-git clone https://github.com/ghabrielferrari/auth-playground-ios.git
+```text
+https://api.redepets.xyz
 ```
 
-### 2. Abrir no Xcode
+Esta POC prioriza observabilidade. Depois do login Apple/Google, a tela autenticada vira um dashboard com sessão, claims do JWT, refresh token mascarado, chamadas protegidas, retries automáticos e testes negativos.
 
-Abra o arquivo `.xcodeproj` diretamente. Não é necessário nenhum passo adicional de build — as dependências são gerenciadas via Swift Package Manager.
+## O Que Ela Testa
 
-### 3. Configurar Google Sign-In
+- `POST /auth/login` com Apple ou Google.
+- Persistência separada de sessão (`current-session`) e credenciais (`session-credentials`) no Keychain.
+- Access token JWT interno e refresh token opaco.
+- Refresh preventivo quando o access token está expirado localmente.
+- Refresh automático quando uma request protegida recebe `401`.
+- Retry único da request original após refresh.
+- `POST /auth/logout` no logout remoto, seguido de limpeza local.
+- `GET /users/me`.
+- `GET /api/tutors/me`.
+- `PUT /api/tutors/me`.
+- Testes negativos para refresh inválido e request protegida sem token.
 
-O arquivo `GoogleService-Info.plist` contém credenciais sensíveis e não está versionado no repositório. Solicite o arquivo ao responsável pelo projeto e adicione-o dentro do target no Xcode antes de rodar.
+## Como Rodar
 
-### 4. Rodar
+1. Abra `JordaniaTeam.xcodeproj` no Xcode.
+2. Garanta que o arquivo `GoogleSignIn-Info.plist` está no target do app.
+3. Selecione um simulador ou device iOS 17+.
+4. Rode com `Cmd + R`.
 
-Selecione o simulador ou device e pressione `Cmd + R`.
+Observação: sessões antigas que tinham só `access-token` legado serão limpas no launch. Faça login novamente para receber `accessToken + refreshToken`.
 
----
+## Dashboard
 
-## POCs
+A tela autenticada mostra:
 
-### POC 1 — Sign in with Apple
-**Branch:** `feat/poc-1-apple-sign-in`
+- `Environment`: base URL, horário local, bundle e build.
+- `Session`: `userId`, email, provider, role, nome local e presença de credenciais.
+- `Access token claims`: `sub`, `iss`, `iat`, `exp`, segundos até expirar, provider, role, email e name.
+- `Refresh token`: presença, expiração e valor mascarado.
+- `/users/me`: botão de carga, status HTTP, body bruto e DTO decodificado.
+- `PUT /api/tutors/me`: formulário, preview JSON, status e body.
+- `GET /api/tutors/me`: status/body; `404` é esperado antes de criar tutor.
+- `Refresh`: botão de refresh manual com tokens antigos/novos mascarados.
+- `Negative tests`: refresh inválido e `/users/me` sem token.
+- `Event log`: login, refresh preventivo, refresh por `401`, retry, logout e erros.
 
-Valida o fluxo completo de autenticação com Apple:
-- Botão oficial `SignInWithAppleButton`
-- Estados: `signedOut` / `loading` / `signedIn` / `error`
-- Sessão em memória
-- Sign out local
-- Tratamento de cancelamento e erro
+Os blocos de debug usam seleção de texto para facilitar copiar payloads e claims.
 
-### POC 2 — Google Sign-In
-**Branch:** `feat/poc-2-google-sign-in`
+## Checklist Manual
 
-Adiciona Google ao mesmo app, usando a mesma arquitetura base do POC 1:
-- SDK oficial `GoogleSignIn`
-- Tratamento de `onOpenURL` e restore de sessão
-- Comparação do delta de complexidade vs Apple
+1. Faça login com Google ou Apple.
+2. Confirme que a sessão mostra access token e refresh token presentes.
+3. Clique em `Load /users/me` e confirme `HTTP 200`.
+4. Clique em `GET tutor`; antes de criar tutor, `HTTP 404` é um estado válido.
+5. Preencha `name` e `username`, confira o preview JSON e salve com `PUT /api/tutors/me`.
+6. Clique em `Force refresh` e confirme que access e refresh mascarados mudaram.
+7. Rode `Invalid refresh` e confirme `HTTP 401`.
+8. Rode `/users/me no token` e confirme `HTTP 401/403`.
+9. Faça `Sign Out` e confirme que o app volta ao login.
 
-### POC 3 — Persistência local
-**Branch:** `feat/poc-3-swiftdata-session`
+## Validação De Build
 
-Adiciona persistência local com SwiftData:
-- Cache local de sessão/perfil
-- Restauração de estado ao reabrir o app
-- Limpeza correta no sign out
-- Valida consistência entre estado do provider e estado local
+O projeto usa `PBXFileSystemSynchronizedRootGroup`; novos arquivos dentro de `JordaniaTeam/` entram no target automaticamente.
 
----
-
-## Estrutura do projeto
-
-```
-AuthPlayground/
-├── App/                  # Entry point e composição
-├── Features/
-│   └── Auth/
-│       ├── Views/        # Telas (sem lógica de negócio)
-│       └── ViewModels/   # Estado e coordenação de UI
-├── Core/
-│   ├── Authentication/   # Serviços e providers de auth
-│   └── Session/          # Estado global de sessão
-└── Models/               # Modelos de domínio simples
-```
-
----
-
-## Princípios
-
-- Apple Human Interface Guidelines
-- Swift moderno e idiomático — async/await, Observation, tipos value
-- Sem overengineering — cada camada tem razão de existir
-- Separação clara de responsabilidades
-- Testabilidade por design
-- Cada POC responde uma pergunta técnica específica
+Nesta máquina, `xcodebuild` pode falhar se o `xcode-select` estiver apontando para Command Line Tools em vez do Xcode completo. A validação recomendada é `Cmd + B`/`Cmd + R` no Xcode.

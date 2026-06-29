@@ -21,17 +21,20 @@ final class AuthViewModel {
     private let session: SessionStore
     private let appleAuthService: AppleAuthService
     private let googleAuthService: GoogleAuthService
+    private let backendAuthService: BackendAuthService
 
     // MARK: - Init
 
     init(
         session: SessionStore,
         appleAuthService: AppleAuthService? = nil,
-        googleAuthService: GoogleAuthService? = nil
+        googleAuthService: GoogleAuthService? = nil,
+        backendAuthService: BackendAuthService = BackendAuthService()
     ) {
         self.session = session
         self.appleAuthService = appleAuthService ?? AppleAuthService()
         self.googleAuthService = googleAuthService ?? GoogleAuthService()
+        self.backendAuthService = backendAuthService
     }
 
     // MARK: - Apple
@@ -59,10 +62,28 @@ final class AuthViewModel {
     // MARK: - Sign Out
 
     func signOut() {
-        if session.currentUser?.provider == .google {
-            googleAuthService.signOut()
+        let provider = session.currentUser?.provider
+        let accessToken = session.loadCredentials()?.accessToken
+
+        Task { @MainActor in
+            if provider == .google {
+                googleAuthService.signOut()
+            }
+
+            if let accessToken {
+                session.setLogoutStatus("POST /auth/logout iniciado")
+                do {
+                    let result = try await backendAuthService.logout(accessToken: accessToken)
+                    session.setLogoutStatus("POST /auth/logout -> HTTP \(result.statusCode)")
+                } catch {
+                    session.setLogoutStatus("POST /auth/logout falhou: \(String(describing: error))")
+                }
+            } else {
+                session.setLogoutStatus("POST /auth/logout ignorado: access token ausente")
+            }
+
+            session.signOut()
         }
-        session.signOut()
     }
 
     // MARK: - Private
@@ -76,7 +97,7 @@ final class AuthViewModel {
             defer { signInTask = nil }
             do {
                 let authSession = try await operation()
-                session.signIn(user: authSession.user, token: authSession.token)
+                session.signIn(user: authSession.user, credentials: authSession.credentials)
             } catch AuthError.cancelled, NetworkError.cancelled {
                 session.isLoading = false
             } catch let networkError as NetworkError {
