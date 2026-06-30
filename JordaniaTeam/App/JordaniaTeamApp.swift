@@ -24,6 +24,11 @@ struct JordaniaTeamApp: App {
                     container.bootstrap()
                     await container.sessionStore.validateSession(using: container.userService)
                 }
+                .onChange(of: scenePhase) { old, phase in
+                    // só revalida se estava em background (foreground transition)
+                    guard phase == .active, old == .background else { return }
+                    Task { await container.sessionStore.validateSession(using: container.userService) }
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }

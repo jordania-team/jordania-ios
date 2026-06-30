@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		69A784842FEECDD3001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		69A784842FEECDD3001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = JordaniaTeam.app; path = "/Users/ferrari/Xcode/jordania-ios/build/Debug-iphoneos/JordaniaTeam.app"; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,7 +53,6 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* JordaniaTeam */,
-				69A784842FEECDD3001905DC /* JordaniaTeam.app */,
 			);
 			sourceTree = "<group>";
 		};
