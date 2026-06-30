@@ -10,7 +10,7 @@ import OSLog
 import Security
 
 /// Persiste e recupera a sessão do usuário, o access JWT e o refresh token no Keychain do iOS.
-struct KeychainService {
+struct KeychainService: Sendable {
 
     private let logger = Logger(subsystem: "app.jordania", category: "Keychain")
     private let service = "app.jordania.auth"

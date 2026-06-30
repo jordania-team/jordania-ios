@@ -9,7 +9,7 @@ import Foundation
 
 /// Responsável exclusivamente por ler e escrever sessão, access token e refresh token via Keychain.
 /// A SessionStore e o TokenProvider delegam persistência para cá.
-final class SessionPersistence {
+final class SessionPersistence: Sendable {
 
     private let keychain: KeychainService
 
