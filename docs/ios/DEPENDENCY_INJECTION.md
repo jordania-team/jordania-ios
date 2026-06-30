@@ -1,51 +1,41 @@
 # Dependency Injection
 
-**Purpose:** Documents how Jordania manages dependencies — how the graph is constructed, how types receive their dependencies, and the rules that keep it explicit and testable.
+**Purpose:** Documenta como o Jordania gerencia dependências — como o grafo é construído, como tipos recebem suas dependências e as regras que mantêm tudo explícito e testável.
 
-**Scope:** Composition root, injection patterns, and rules. The reason these choices were made is recorded in [ADR-003](../architecture/DECISION_LOG.md#adr-003). Architecture layers are described in [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+**Scope:** Composition root, padrões de injeção e regras. O motivo dessas escolhas está em [ADR-003](../architecture/DECISION_LOG.md). As camadas de arquitetura estão descritas em [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
 
 ---
 
 ## Table of Contents
 
-1. [Principles](#principles)
-2. [AppContainer — The Composition Root](#appcontainer--the-composition-root)
-3. [Injection Patterns](#injection-patterns)
-4. [Dependency Rules](#dependency-rules)
-5. [Testing without Protocols](#testing-without-protocols)
+1. [Princípios](#princípios)
+2. [AppContainer — A Composition Root](#appcontainer--a-composition-root)
+3. [Grafo de Dependências](#grafo-de-dependências)
+4. [Padrões de Injeção](#padrões-de-injeção)
+5. [Regras de Dependência](#regras-de-dependência)
+6. [Testes sem Protocolos](#testes-sem-protocolos)
 
 ---
 
-## Principles
+## Princípios
 
-1. **Initialisers are the only injection mechanism.** Types declare their dependencies as init parameters. No property injection, no setter injection, no ambient globals.
-2. **One composition root.** `AppContainer` is instantiated once by `JordaniaTeamApp` and is the sole place the dependency graph is assembled.
-3. **No framework.** Swinject, Needle, Factory, and equivalents are not used. Plain Swift is sufficient.
-4. **No Service Locator.** Types do not look up their dependencies from a global registry. They receive exactly what they need at init time and nothing more.
-5. **SwiftUI environment for `SessionStore` only.** `SessionStore` is propagated via `.environment()` to make it accessible deep in the view tree without threading it through every intermediate view. This is the exception, not the model.
+1. **Inicializadores são o único mecanismo de injeção.** Tipos declaram suas dependências como parâmetros de `init`. Sem property injection, sem setter injection, sem globals ambiente.
+2. **Uma única composition root.** `AppContainer` é instanciado uma vez por `JordaniaTeamApp` e é o único lugar onde o grafo de dependências é montado.
+3. **Sem framework.** Swinject, Needle, Factory e equivalentes não são usados. Swift puro é suficiente para o tamanho do projeto.
+4. **Sem Service Locator.** Tipos não buscam suas dependências em um registro global. Recebem exatamente o que precisam no `init` — nada mais.
+5. **SwiftUI environment apenas para `SessionStore`.** `SessionStore` é propagado via `.environment()` para ser acessível em profundidade na árvore de Views sem ser passado por cada View intermediária. Essa é a exceção, não o modelo.
 
 ---
 
-## AppContainer — The Composition Root
+## AppContainer — A Composition Root
 
-`AppContainer` builds the entire graph in its `init`. The construction order is determined by the dependency relationships:
-
-```
-SessionPersistence
-  └── SessionStore
-        └── AuthViewModel
-
-SessionPersistence + BackendAuthService + SessionStore
-  └── TokenProvider
-        └── APIClient
-              └── UserService
-```
-
-Full construction:
+`AppContainer` constrói o grafo completo em seu `init`. A ordem de construção é determinada pelas relações de dependência:
 
 ```swift
+// AppContainer.swift
 @MainActor
 final class AppContainer {
+
     let sessionStore: SessionStore
     let apiClient: APIClient
     let authViewModel: AuthViewModel
@@ -67,6 +57,7 @@ final class AppContainer {
             session: urlSession,
             sessionStore: store
         )
+
         self.sessionStore  = store
         self.apiClient     = client
         self.authViewModel = AuthViewModel(session: store)
@@ -79,24 +70,68 @@ final class AppContainer {
 }
 ```
 
-The `init` accepts overrides for `SessionPersistence`, `BackendAuthService`, and `URLSession` — the three points that need to be substituted in tests or alternative configurations. All other types are constructed from these.
+O `init` aceita overrides para `SessionPersistence`, `BackendAuthService` e `URLSession` — os três pontos que precisam ser substituídos em testes ou configurações alternativas. Todos os outros tipos são construídos a partir desses três.
 
-`bootstrap()` is called explicitly by `JordaniaTeamApp` after construction. This separation keeps `init` pure and free of side effects.
+`bootstrap()` é chamado explicitamente por `JordaniaTeamApp.body` via `.task { container.bootstrap() }`. Essa separação mantém o `init` puro e livre de side effects.
+
+### Entry point
+
+```swift
+// JordaniaTeamApp.swift
+@main
+struct JordaniaTeamApp: App {
+    private let container = AppContainer()
+
+    var body: some Scene {
+        WindowGroup {
+            RootView(container: container)
+                .task {
+                    container.bootstrap()
+                    await container.sessionStore.validateSession(using: container.userService)
+                }
+        }
+    }
+}
+```
+
+`AppContainer` é criado como propriedade armazenada de `JordaniaTeamApp` — instanciado uma única vez, no launch, antes do primeiro render.
 
 ---
 
-## Injection Patterns
+## Grafo de Dependências
 
-### Pattern 1 — Direct ViewModel init (standard)
+```
+SessionPersistence
+  └── SessionStore
+        └── AuthViewModel
 
-The most common pattern. `AppContainer` passes a dependency to a ViewModel at construction time:
+SessionPersistence + BackendAuthService + SessionStore
+  └── TokenProvider
+        └── APIClient
+              └── UserService
+```
+
+Observações importantes sobre o grafo:
+
+- `TokenProvider` e `APIClient` são `actor` — serializam acesso a estado compartilhado entre Tasks concorrentes.
+- `APIClient` e `TokenProvider` mantêm `weak var sessionStore: SessionStore?` para evitar retain cycle no grafo.
+- `SessionStore` não conhece `APIClient` — o flow de invalidação de sessão vai de `APIClient → TokenProvider → SessionStore.signOut()`, nunca o contrário.
+- `AuthViewModel` recebe apenas `SessionStore` — não precisa de `APIClient` porque não faz chamadas de rede diretamente.
+
+---
+
+## Padrões de Injeção
+
+### Padrão 1 — Init direto do ViewModel (padrão)
+
+O padrão mais comum. `AppContainer` passa uma dependência para um ViewModel no momento da construção:
 
 ```swift
-// In AppContainer.init
+// AppContainer.init
 self.authViewModel = AuthViewModel(session: store)
 ```
 
-The ViewModel stores the dependency as a `private let`:
+O ViewModel armazena a dependência como `private let`:
 
 ```swift
 final class AuthViewModel {
@@ -116,13 +151,14 @@ final class AuthViewModel {
 }
 ```
 
-Optional parameters with defaults are used for services that have no external dependencies and are easily substituted in tests (see [Testing without Protocols](#testing-without-protocols)).
+Parâmetros opcionais com defaults são usados para services que não têm dependências externas e são facilmente substituídos em testes.
 
-### Pattern 2 — View-owned ViewModel init (when the View needs injected values)
+### Padrão 2 — ViewModel criado pela View no `init` (quando a View precisa de valores injetados)
 
-When a View needs to construct its ViewModel with injected values from the call site, the ViewModel is created inside the View's `init` and owned via `@State`:
+Quando uma View precisa construir seu ViewModel com valores do call site, o ViewModel é criado dentro do `init` da View e possuído via `@State`:
 
 ```swift
+// AuthView.swift
 struct AuthView: View {
     @State private var viewModel: AuthViewModel
 
@@ -132,11 +168,11 @@ struct AuthView: View {
 }
 ```
 
-This ensures the ViewModel is created once, with the correct dependencies, before the View's first render.
+Isso garante que o ViewModel é criado uma única vez, com as dependências corretas, antes do primeiro render da View.
 
-### Pattern 3 — SwiftUI environment (SessionStore only)
+### Padrão 3 — SwiftUI environment (apenas SessionStore)
 
-`SessionStore` is injected into the SwiftUI environment at `RootView` so that views deep in the `AuthView` subtree can access it without threading it through every intermediate view:
+`SessionStore` é injetado no environment SwiftUI em `RootView` para que Views profundas na subárvore de `AuthView` possam acessá-lo sem que cada View intermediária precise passá-lo:
 
 ```swift
 // RootView.swift
@@ -145,11 +181,11 @@ case .signedOut:
         .environment(container.sessionStore)
 ```
 
-Child views read it with `@Environment(SessionStore.self)`. This pattern is **reserved for `SessionStore` only**. It must not be used for services, ViewModels, or `AppContainer`.
+Views filhas lêem com `@Environment(SessionStore.self)`. Esse padrão é **reservado para `SessionStore` apenas**. Nunca use para services, ViewModels ou `AppContainer`.
 
-### Pattern 4 — Container propagation (for deep feature trees)
+### Padrão 4 — Propagação do container (para árvores de features)
 
-When a feature view tree needs multiple dependencies from `AppContainer`, the container is passed explicitly to the root of the tree:
+Quando uma árvore de Views de feature precisa de múltiplas dependências do `AppContainer`, o container é passado explicitamente para a raiz da árvore:
 
 ```swift
 // RootView.swift
@@ -157,24 +193,40 @@ case .authenticated:
     MainTabView(container: container)
 ```
 
-`MainTabView` receives `container` and passes individual services to feature views that need them. No feature view imports or stores the full `AppContainer`.
+`MainTabView` recebe `container` e passa services individuais para as Views de feature que precisam deles. Nenhuma View de feature importa ou armazena o `AppContainer` completo.
 
 ---
 
-## Dependency Rules
+## Regras de Dependência
 
-- **`AppContainer` is referenced only in `App/`.** `RootView` and `MainTabView` receive it; no feature ViewModel or service references `AppContainer` directly.
-- **Services are `private let` properties of their consumers.** Dependencies are stored, not looked up.
-- **No optional dependencies except at the `AppContainer` init boundary.** Internally, all dependencies are non-optional.
-- **`weak var` for back-references that would create retain cycles.** `APIClient` and `TokenProvider` hold `weak var sessionStore: SessionStore?` to avoid a retain cycle through the graph.
+- **`AppContainer` é referenciado apenas em `App/`.** `RootView` e `MainTabView` o recebem; nenhum ViewModel ou service de feature referencia `AppContainer` diretamente.
+- **Services são propriedades `private let` de seus consumidores.** Dependências são armazenadas, não buscadas.
+- **Sem dependências opcionais além da fronteira `init` do `AppContainer`.** Internamente, todas as dependências são não-opcionais.
+- **`weak var` para referências de volta que criariam retain cycle.** `APIClient` e `TokenProvider` mantêm `weak var sessionStore: SessionStore?` para evitar um cycle pelo grafo.
+- **Sem singletons.** Nenhum tipo usa `static let shared` como ponto de acesso global. A única instância de cada service vive dentro de `AppContainer`.
+- **`bootstrap()` para side effects de inicialização.** Configuração de SDKs de terceiros (Google Sign-In) fica em `bootstrap()`, não em `init`, mantendo `init` puro.
 
 ---
 
-## Testing without Protocols
+## Testes sem Protocolos
 
-Because the project does not add protocols for every service (see [ADR-005](../architecture/DECISION_LOG.md#adr-005)), tests substitute dependencies via:
+O projeto não adiciona protocolos para cada service (seriam abstrações prematuras para o tamanho atual). Testes substituem dependências via:
 
-1. **`AppContainer` init overrides** — pass a custom `URLSession` (e.g., one backed by `URLProtocol`) to intercept network calls.
-2. **ViewModel optional init parameters** — `AuthViewModel` accepts optional `AppleAuthService` and `GoogleAuthService`, allowing lightweight subclasses or alternative initialisations.
-3. **`@Observable` state observation** — test that `SessionStore.state` transitions correctly by calling `signIn` / `signOut` directly without mocking the Keychain.
-4. **`SessionPersistence` init override** — pass a `KeychainService` subclass that stores in memory instead of the system Keychain during tests.
+1. **Overrides do `init` do `AppContainer`** — passe um `URLSession` customizado (ex: um backed por `URLProtocol`) para interceptar chamadas de rede:
+
+```swift
+let mockSession = URLSession(configuration: mockConfiguration)
+let container = AppContainer(urlSession: mockSession)
+```
+
+2. **Parâmetros opcionais do `init` do ViewModel** — `AuthViewModel` aceita `AppleAuthService?` e `GoogleAuthService?` opcionais, permitindo subclasses leves ou inicializações alternativas em testes.
+
+3. **Observação de estado `@Observable`** — teste que `SessionStore.state` transita corretamente chamando `signIn` / `signOut` diretamente, sem precisar mockar o Keychain:
+
+```swift
+let store = SessionStore(persistence: inMemoryPersistence)
+store.signIn(user: mockUser, accessToken: "token", refreshToken: "refresh")
+#expect(store.state == .authenticated)
+```
+
+4. **Override de `SessionPersistence`** — passe uma `SessionPersistence` configurada com um `KeychainService` que armazena em memória durante testes, sem tocar no Keychain do sistema.

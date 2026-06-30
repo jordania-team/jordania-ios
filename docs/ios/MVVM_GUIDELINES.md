@@ -1,151 +1,197 @@
 # MVVM Guidelines
 
-**Purpose:** Defines what "lightweight MVVM" means in Jordania and establishes the boundaries between Views, ViewModels, and services.
+**Purpose:** Define o que significa "MVVM leve" no Jordania e estabelece os limites entre Views, ViewModels e Services.
 
-**Scope:** ViewModel responsibilities, View responsibilities, state management, and the patterns used in existing code. DI mechanics belong in [DEPENDENCY_INJECTION.md](DEPENDENCY_INJECTION.md). Swift coding style belongs in [SWIFT_STYLE_GUIDE.md](SWIFT_STYLE_GUIDE.md). The broader architectural reasoning belongs in [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+**Scope:** Responsabilidades de ViewModel, responsabilidades de View, responsabilidades de Core, gerenciamento de estado e padrões do código existente. Mecânica de DI pertence a [DEPENDENCY_INJECTION.md](DEPENDENCY_INJECTION.md). Estilo de código pertence a [SWIFT_STYLE_GUIDE.md](SWIFT_STYLE_GUIDE.md). Raciocínio arquitetural pertence a [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
 
 ---
 
 ## Table of Contents
 
-1. [The Three Roles](#the-three-roles)
-2. [ViewModel Rules](#viewmodel-rules)
-3. [View Rules](#view-rules)
-4. [State Ownership](#state-ownership)
-5. [Async Action Pattern](#async-action-pattern)
-6. [Error Presentation](#error-presentation)
-7. [Anti-Patterns](#anti-patterns)
+1. [Os Três Papéis](#os-três-papéis)
+2. [Regras do ViewModel](#regras-do-viewmodel)
+3. [Regras da View](#regras-da-view)
+4. [Responsabilidades de Core](#responsabilidades-de-core)
+5. [Ownership de Estado](#ownership-de-estado)
+6. [Padrão de Ação Async](#padrão-de-ação-async)
+7. [Apresentação de Erros](#apresentação-de-erros)
+8. [Anti-Padrões](#anti-padrões)
 
 ---
 
-## The Three Roles
+## Os Três Papéis
 
-| Layer | Owns | Never does |
+| Camada | Possui | Nunca faz |
 |---|---|---|
-| **View** | Layout, animation, user interaction events | Business logic, direct service calls, state mutation |
-| **ViewModel** | Observable state, action methods, service coordination | UI layout decisions, direct Keychain / network access |
-| **Service** | Domain operations (network, persistence, SDK) | Observable state, UI concerns |
+| **View** | Layout, animações, eventos de interação do usuário | Lógica de negócio, chamadas diretas a services, mutação de estado |
+| **ViewModel** | Estado observável, métodos de ação, coordenação de services | Decisões de layout, acesso direto a Keychain / rede |
+| **Service / Core** | Operações de domínio (rede, persistência, SDKs) | Estado observável, preocupações de UI |
 
-Lightweight MVVM has no Use Case layer and no Repository layer. ViewModels call services directly. This is a deliberate simplification — see [ADR-002](../architecture/DECISION_LOG.md#adr-002).
+MVVM leve não tem camada de Use Cases nem camada de Repository. ViewModels chamam services diretamente. Essa é uma simplificação deliberada — o custo de manutenção de camadas intermediárias supera o benefício para o tamanho e escopo atual do projeto.
 
 ---
 
-## ViewModel Rules
+## Regras do ViewModel
 
-### Declaration
+### Declaração canônica
 
-All ViewModels are `@Observable` `@MainActor` `final class`:
+Todo ViewModel é `@Observable @MainActor final class`:
 
 ```swift
+// AuthViewModel.swift
 @Observable
 @MainActor
 final class AuthViewModel {
+
+    // MARK: - State
     var isLoading: Bool = false
     var errorMessage: String? = nil
+    private var signInTask: Task<Void, Never>?
 
+    // MARK: - Dependencies
     private let session: SessionStore
     private let appleAuthService: AppleAuthService
     private let googleAuthService: GoogleAuthService
 
-    init(session: SessionStore, …) { … }
+    // MARK: - Init
+    init(
+        session: SessionStore,
+        appleAuthService: AppleAuthService? = nil,
+        googleAuthService: GoogleAuthService? = nil
+    ) {
+        self.session = session
+        self.appleAuthService = appleAuthService ?? AppleAuthService()
+        self.googleAuthService = googleAuthService ?? GoogleAuthService()
+    }
 }
 ```
 
-- **`@Observable`** — provides fine-grained observation; only properties actually accessed by a View trigger re-renders.
-- **`@MainActor`** — all state mutations happen on the main thread; no explicit `DispatchQueue.main.async` needed.
-- **`final class`** — `@Observable` requires a class; `final` prevents unintended subclassing.
+- **`@Observable`** — observação granular: apenas propriedades acessadas pela View disparam re-render.
+- **`@MainActor`** — todas as mutações de estado acontecem na main thread; sem `DispatchQueue.main.async` manual.
+- **`final class`** — `@Observable` exige `class`; `final` previne subclassing não-intencional.
 
-### Responsibilities
+### Responsabilidades
 
-- Expose **observable state** that the View renders: `isLoading`, `errorMessage`, domain data.
-- Expose **action methods** that the View calls: `signInWithGoogle()`, `handleAppleSignIn(_:)`, `signOut()`.
-- Coordinate service calls and update state based on results.
-- Own the `Task` lifecycle for async operations.
+- Expor **estado observável** que a View renderiza: `isLoading`, `errorMessage`, dados de domínio.
+- Expor **métodos de ação** que a View chama: `signInWithGoogle()`, `handleAppleSignIn(_:)`, `signOut()`.
+- Coordenar chamadas a services e atualizar estado com base nos resultados.
+- Gerenciar o ciclo de vida de `Task` para operações async.
+- **Não importar `SwiftUI`** (exceto tipos que fazem parte do modelo de dados SwiftUI, como `Color`).
 
-### What ViewModels Must Not Do
+### O que ViewModels nunca fazem
 
-- Import `SwiftUI` (exception: types that are part of the SwiftUI data model, e.g., `Color`).
-- Read or write Keychain directly.
-- Make `URLSession` calls directly.
-- Contain layout or visual logic.
-- Construct their own services — services are injected at init.
+- Ler ou escrever no Keychain diretamente — isso pertence a `SessionPersistence` / `KeychainService`.
+- Fazer chamadas `URLSession` diretamente — isso pertence a `APIClient`.
+- Conter lógica de layout ou visual.
+- Construir seus próprios services — services são injetados no `init`.
+- Criar `Task` dentro de `body` de uma View — isso pertence ao ViewModel.
 
 ---
 
-## View Rules
+## Regras da View
 
-### ViewModel Ownership
+### Ownership do ViewModel
 
-Views own their ViewModel via `@State`. When the ViewModel requires an injected value, initialise it in the View's `init`:
+Views possuem seu ViewModel via `@State`. Quando o ViewModel precisa de valor injetado, crie-o no `init` da View:
 
 ```swift
+// AuthView.swift
 struct AuthView: View {
+    @Environment(SessionStore.self) private var session
     @State private var viewModel: AuthViewModel
 
     init(session: SessionStore) {
         _viewModel = State(initialValue: AuthViewModel(session: session))
     }
 
-    var body: some View { … }
+    var body: some View {
+        // apenas layout e eventos
+    }
 }
 ```
 
-This pattern ensures:
-- The ViewModel is created once and survives view identity changes.
-- The ViewModel receives its dependencies at creation time, not lazily.
-- No ambient service lookup.
+Esse padrão garante:
+1. O ViewModel é criado uma única vez e sobrevive a mudanças de identidade da View.
+2. O ViewModel recebe suas dependências no momento da criação, não lazily.
+3. Sem lookup ambiente de services.
 
-### View Responsibilities
+### Responsabilidades da View
 
-- Read ViewModel properties and render them.
-- Call ViewModel action methods in response to user interactions.
-- Manage presentation state (`@State` booleans for sheet/alert visibility).
-- Extract private subviews for visual organisation.
+- Ler propriedades do ViewModel e renderizá-las.
+- Chamar métodos de ação do ViewModel em resposta a interações do usuário.
+- Gerenciar estado de apresentação local (`@State` booleans para sheet/alert).
+- Extrair subviews privadas para organização visual.
 
-### What Views Must Not Do
+### O que Views nunca fazem
 
-- Contain `if`/`switch` logic that implements business rules.
-- Call services, `SessionStore`, or `APIClient` directly.
-- Own `Task` blocks that perform domain work (delegate to the ViewModel).
+- Conter `if`/`switch` que implementam regras de negócio.
+- Chamar services, `SessionStore` ou `APIClient` diretamente.
+- Criar blocos `Task` que realizam trabalho de domínio — delegue ao ViewModel.
+- Conter lógica de formatação complexa em `body` — extraia para propriedade ou método.
 
 ---
 
-## State Ownership
+## Responsabilidades de Core
 
-| State type | Owner | Mechanism |
+`Core/` contém código que não pertence a nenhuma feature específica mas é necessário para várias.
+
+| Módulo | Responsabilidade | Tipo Swift |
 |---|---|---|
-| Loading / error during an action | ViewModel | `var isLoading: Bool`, `var errorMessage: String?` |
-| Authentication state | `SessionStore` | `@Observable` observed by `RootView` |
-| Current user profile | `SessionStore.currentUser` | Propagated via `@Environment` or explicit passing |
-| Navigation path (future) | Feature root ViewModel | `var path: NavigationPath` |
-| Sheet / alert visibility | View | `@State var isSheetPresented: Bool` |
+| `Core/Session/SessionStore` | Fonte única de verdade do estado de autenticação | `@Observable @MainActor final class` |
+| `Core/Session/SessionPersistence` | Leitura/escrita de sessão e tokens no Keychain | `final class` |
+| `Core/Session/AuthenticatedUser` | Modelo do usuário autenticado | `struct` |
+| `Core/Session/SessionState` | Estados possíveis da sessão | `enum` |
+| `Core/Authentication/AppleAuthService` | Fluxo Sign in with Apple | `struct` |
+| `Core/Authentication/GoogleAuthService` | Fluxo Google Sign-In | `struct` |
+| `Core/Authentication/BackendAuthService` | Troca de tokens com o backend | `struct` |
+| `Core/Authentication/TokenProvider` | Refresh proativo + coalescing | `actor` |
+| `Core/Networking/APIClient` | Execução de requests HTTP autenticados | `actor` |
+| `Core/Security/KeychainService` | Primitivas de Keychain | `struct` |
 
-The rule: state that affects multiple views is owned by the highest common ancestor or by `SessionStore`. State local to one view is `@State` in that View.
+**Regra:** Core não importa nada de `Features/`. Features importam de Core. Nunca o contrário.
 
 ---
 
-## Async Action Pattern
+## Ownership de Estado
 
-`AuthViewModel.performSignIn(_:)` establishes the canonical pattern for async actions:
+| Tipo de estado | Dono | Mecanismo |
+|---|---|---|
+| Loading / erro durante uma ação | ViewModel | `var isLoading: Bool`, `var errorMessage: String?` |
+| Estado de autenticação | `SessionStore` | `@Observable` observado por `RootView` |
+| Usuário atual | `SessionStore.currentUser` | Propagado via `@Environment` ou passagem explícita |
+| Navigation path (features futuras) | ViewModel raiz da feature | `var path: NavigationPath` |
+| Visibilidade de sheet / alert | View | `@State var isSheetPresented: Bool` |
+| Refresh token em voo | `TokenProvider` | `private var refreshTask: Task<String, Error>?` |
+
+**Regra:** estado que afeta múltiplas views pertence ao ancestral comum mais alto ou a `SessionStore`. Estado local a uma view é `@State` nessa View.
+
+---
+
+## Padrão de Ação Async
+
+`AuthViewModel.performSignIn(_:)` é o padrão canônico para todas as ações async em ViewModels:
 
 ```swift
+// AuthViewModel.swift
 private func performSignIn(_ operation: @escaping () async throws -> AuthSession) {
-    guard signInTask == nil else { return }   // prevent concurrent submissions
+    guard signInTask == nil else { return }   // ① evita submissão concorrente
     isLoading = true
     signInTask = Task {
         defer {
-            isLoading = false
+            isLoading = false                  // ② teardown em qualquer caminho de saída
             signInTask = nil
         }
         do {
             let authSession = try await operation()
-            session.signIn(user: authSession.user,
-                           accessToken: authSession.accessToken,
-                           refreshToken: authSession.refreshToken)
+            session.signIn(
+                user: authSession.user,
+                accessToken: authSession.accessToken,
+                refreshToken: authSession.refreshToken
+            )
         } catch AuthError.cancelled, NetworkError.cancelled {
-            // silent — user-initiated cancellation
+            // ③ silencioso — cancelamento iniciado pelo usuário
         } catch let networkError as NetworkError {
-            errorMessage = networkError.errorDescription
+            errorMessage = networkError.errorDescription ?? "Tente novamente."
         } catch {
             errorMessage = "Não foi possível concluir o login. Tente novamente."
         }
@@ -153,34 +199,38 @@ private func performSignIn(_ operation: @escaping () async throws -> AuthSession
 }
 ```
 
-Key properties of this pattern:
-1. **Guard against concurrent execution** — `guard signInTask == nil` prevents double-submission.
-2. **`defer` for teardown** — `isLoading` and `signInTask` are always reset, even on early exit.
-3. **Typed cancellation handling** — `AuthError.cancelled` and `NetworkError.cancelled` are caught and discarded silently.
-4. **Typed error handling** — known errors map to user-facing messages; unknown errors get a generic fallback.
-5. **State update on `@MainActor`** — all mutations happen on the main actor without extra dispatching.
+Propriedades obrigatórias do padrão:
 
-New async actions in other ViewModels must follow this same structure.
+1. **Guard contra execução concorrente** — `guard signInTask == nil` previne duplo submit.
+2. **`defer` para teardown** — `isLoading` e `signInTask` sempre são resetados, inclusive em early exit.
+3. **Tratamento tipado de cancelamento** — `AuthError.cancelled` e `NetworkError.cancelled` são descartados silenciosamente.
+4. **Tratamento tipado de erros** — erros conhecidos mapeiam para mensagens específicas; desconhecidos recebem fallback genérico.
+5. **Mutações de estado no `@MainActor`** — sem despacho manual para a main thread.
 
----
-
-## Error Presentation
-
-- ViewModels expose `var errorMessage: String?`.
-- Views bind this to an `.alert` or inline error text.
-- `nil` means no error is currently displayed.
-- The ViewModel clears `errorMessage` before starting a new operation.
-- **Never** show raw `Error.localizedDescription` — always use `error.errorDescription` from `LocalizedError` conformances, or a hardcoded fallback string.
+Novas ações async em outros ViewModels **devem seguir essa mesma estrutura**.
 
 ---
 
-## Anti-Patterns
+## Apresentação de Erros
 
-| Anti-pattern | Problem | Correction |
+- ViewModels expõem `var errorMessage: String?`.
+- Views vinculam isso a um `.alert` ou texto de erro inline.
+- `nil` significa que nenhum erro está sendo exibido.
+- O ViewModel limpa `errorMessage` antes de iniciar uma nova operação.
+- **Nunca** mostre `error.localizedDescription` bruto — use sempre `error.errorDescription` de conformances `LocalizedError`, ou um fallback hardcoded.
+- Erros de cancelamento (`AuthError.cancelled`, `NetworkError.cancelled`) nunca produzem mensagens na UI.
+
+---
+
+## Anti-Padrões
+
+| Anti-padrão | Problema | Correção |
 |---|---|---|
-| ViewModel imports `SwiftUI` for non-data reasons | Creates UI coupling | Move visual logic to the View |
-| View calls `APIClient` or `KeychainService` directly | Bypasses ViewModel layer | Route through a ViewModel action |
-| Multiple concurrent Tasks for the same action | Race conditions, duplicate state updates | Guard with a stored `Task?` property |
-| `ObservableObject` / `@Published` | Superseded by `@Observable` | Migrate to `@Observable` |
-| ViewModel constructed inside `body` | Recreated on every render | Own via `@State` in `init` |
-| Business logic in `body` | Untestable, poor separation | Extract to ViewModel method |
+| ViewModel importa `SwiftUI` para lógica visual | Acoplamento de UI | Mova a lógica visual para a View |
+| View chama `APIClient` ou `KeychainService` diretamente | Bypassa a camada de ViewModel | Roteie por um método de ação do ViewModel |
+| Múltiplas Tasks concorrentes para a mesma ação | Race conditions, atualizações de estado duplicadas | Guard com propriedade `Task?` armazenada |
+| `ObservableObject` / `@Published` | Superado por `@Observable` | Migre para `@Observable` |
+| ViewModel construído dentro de `body` | Recriado a cada render | Possua via `@State` no `init` |
+| Lógica de negócio em `body` | Não testável, separação ruim | Extraia para método do ViewModel |
+| Service Locator ou singleton global | Dependências ocultas | Injeção por inicializador (ver [DEPENDENCY_INJECTION.md](DEPENDENCY_INJECTION.md)) |
+| Modelo de domínio em `Shared/` | Acoplamento entre features | Modelos pertencem à sua feature ou a `Core/Session` |
