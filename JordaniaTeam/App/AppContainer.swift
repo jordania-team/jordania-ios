@@ -19,8 +19,8 @@ final class AppContainer {
     let userService: UserService
 
     init(
-        persistence: SessionPersistence = SessionPersistence(),
-        authService: BackendAuthService = BackendAuthService(),
+        persistence: SessionPersistence,
+        authService: BackendAuthService,
         urlSession: URLSession = .shared
     ) {
         let store = SessionStore(persistence: persistence)
@@ -41,6 +41,15 @@ final class AppContainer {
         self.userService   = UserService(apiClient: client)
     }
 
+    convenience init() {
+        self.init(
+            persistence: SessionPersistence(),
+            authService: BackendAuthService()
+        )
+    }
+    
+    // MARK: - Lifecycle
+    
     /// Configuração de SDKs de terceiros.
     /// Chamada explicitamente pelo entry point, mantendo o `init` puro.
     func bootstrap() {
