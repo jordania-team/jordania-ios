@@ -1,96 +1,144 @@
 # Navigation
 
-**Purpose:** Describes how the Jordania application navigates between screens — the state-driven root switch, the tab structure, and the conventions for intra-feature navigation.
+**Purpose:** Document how Jordania routes between top-level destinations and how the authentication state machine drives that routing.
 
-**Scope:** Application-level and feature-level navigation patterns. Session state machine lives in [ARCHITECTURE.md](ARCHITECTURE.md). The `SessionStore` source of truth is described in [../backend/AUTHENTICATION.md](../backend/AUTHENTICATION.md).
+**Scope:** Application-level navigation only — `SessionState`, `RootView`, and `MainTabView`. Feature-internal navigation (sheet presentation, push navigation within a feature) is the responsibility of each feature and is not covered here. The architectural context for these types lives in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
 ## Table of Contents
 
-1. [Navigation Philosophy](#navigation-philosophy)
-2. [Root Navigation](#root-navigation)
-3. [Tab Structure](#tab-structure)
-4. [Feature Navigation](#feature-navigation)
-5. [Navigation Rules](#navigation-rules)
+1. [Session State Machine](#session-state-machine)
+2. [RootView — Top-Level Router](#rootview--top-level-router)
+3. [MainTabView — Authenticated Navigation](#maintabview--authenticated-navigation)
+4. [Lifecycle Events](#lifecycle-events)
+5. [Adding a New Tab](#adding-a-new-tab)
 
 ---
 
-## Navigation Philosophy
+## Session State Machine
 
-Navigation in Jordania is **state-driven, not imperative**. The visible screen is a pure function of `SessionStore.state`. No coordinator objects, no router singletons, no `NavigationPath` managed globally. SwiftUI's native navigation stack is the only tool used.
+`SessionState` is a Swift enum with four cases. `SessionStore.state` is the single observable source that drives all top-level routing decisions.
 
----
-
-## Root Navigation
-
-`RootView` owns the application-level navigation switch. It reads `container.sessionStore.state` and renders the appropriate top-level view:
-
-```swift
-// RootView.swift
-switch container.sessionStore.state {
-case .loading:              ProgressView()
-case .authenticated:        MainTabView(container: container)
-case .signedOut:            AuthView(session: container.sessionStore)
-                                .environment(container.sessionStore)
-case .error(let message):  SessionErrorView(message: message) { … }
-}
+```
+               app launch
+                   │
+                   ▼
+             ┌─────────┐
+             │ loading │  ← initial state while Keychain is read
+             └────┬────┘
+      ┌───────────┼────────────┐
+      ▼           ▼            ▼
+ ┌──────────┐ ┌──────────┐ ┌───────────────────────────┐
+ │signedOut │ │authenticated│ │ error(String)            │
+ └────┬─────┘ └─────┬────┘ └────────────┬──────────────┘
+      │              │                   │
+  user logs in    session             retry()
+      │           expires                │
+      └──────────────┴───────────────────┘
+                   │
+              (cycle)
 ```
 
-### Session States
-
-| State | Trigger | Screen shown |
+| Case | Meaning | `RootView` renders |
 |---|---|---|
-| `.loading` | App launch, before Keychain read completes | `ProgressView` |
-| `.authenticated` | Successful sign-in or valid persisted session | `MainTabView` |
-| `.signedOut` | Explicit logout or expired/missing session | `AuthView` |
-| `.error(message)` | Session validation failed with an unrecoverable error | `SessionErrorView` |
+| `.loading` | Keychain read in progress; session validity unknown | `ProgressView()` |
+| `.authenticated` | Valid session in Keychain; user identity available via `currentUser` | `MainTabView` |
+| `.signedOut` | No session, or session was explicitly cleared | `AuthView` |
+| `.error(String)` | Session validation failed with a non-recoverable error | `SessionErrorView` |
 
-The transition from `.loading` to `.authenticated` or `.signedOut` happens synchronously in `SessionStore.init()` — the app never displays `.loading` for more than one frame under normal conditions.
-
-The `.error` state is reached when `validateSession(using:)` fails for reasons other than `NetworkError.unauthorized`. A retry button calls `container.sessionStore.retry(using: container.userService)`, which resets to `.loading` and re-runs validation.
+**Transitions:**
+- `loading → authenticated` or `loading → signedOut`: triggered during `SessionStore.init` based on `SessionPersistence.loadSession()`.
+- `authenticated → signedOut`: triggered by `SessionStore.signOut()` — called explicitly by the user, or by `APIClient` after a second 401.
+- `authenticated → error(String)`: triggered by `SessionStore.validateSession()` encountering an unexpected failure.
+- `error → loading → authenticated/signedOut`: triggered by the retry action in `SessionErrorView`.
 
 ---
 
-## Tab Structure
+## RootView — Top-Level Router
 
-`MainTabView` uses the SwiftUI `TabView` with iOS 26's `Tab` API:
+`RootView` is a pure routing view. It reads `container.sessionStore.state` and switches between destinations. It contains no UI chrome of its own.
 
 ```swift
-TabView {
-    Tab("Feed",    systemImage: "rectangle.stack.fill") { FeedView()    }
-    Tab("Map",     systemImage: "location.fill")         { MapView()     }
-    Tab("Profile", systemImage: "person.fill")           { ProfileView() }
-    Tab("Search",  systemImage: "magnifyingglass",
-        role: .search)                                   { SearchView()  }
+// RootView.swift — abridged for documentation
+switch container.sessionStore.state {
+case .loading:          ProgressView()
+case .authenticated:    MainTabView(container: container)
+case .signedOut:        AuthView(session: container.sessionStore)
+                            .environment(container.sessionStore)
+case .error(let msg):   SessionErrorView(message: msg) { retry }
 }
 ```
 
-| Tab | Icon | Role | Entry view |
-|---|---|---|---|
-| Feed | `rectangle.stack.fill` | default | `FeedView` |
-| Map | `location.fill` | default | `MapView` |
-| Profile | `person.fill` | default | `ProfileView` |
-| Search | `magnifyingglass` | `.search` | `SearchView` |
-
-The `Search` tab uses `role: .search`, which enables the system search experience on iOS 26. `MainTabView` receives `AppContainer` and is responsible for propagating dependencies to feature views that need them.
+**Design decisions:**
+- `RootView` receives `AppContainer` directly. This is intentional — it is the handoff point between the composition root and the feature/navigation layer.
+- `SessionStore` is passed as `@Environment` to `AuthView` so that deeply nested views can read session state without prop-drilling.
+- `RootView` does not animate between states. State transitions at this level are infrequent and abrupt transitions (sign-in, sign-out) are acceptable.
 
 ---
 
-## Feature Navigation
+## MainTabView — Authenticated Navigation
 
-Intra-feature navigation uses `NavigationStack` with `navigationDestination(for:)`. Each feature owns its own stack.
+`MainTabView` is displayed when `SessionStore.state == .authenticated`. It owns the tab structure for the authenticated experience.
 
-Conventions:
-- A feature's root view is always a plain `struct` with no `NavigationStack` wrapper — the tab provides the stack.
-- Feature navigation state (the `NavigationPath`) is owned by the feature's root ViewModel or a dedicated navigation ViewModel, never by the View itself.
-- Modal presentations (sheets, full-screen covers) are controlled by a `@State` boolean in the presenting View, driven by a ViewModel action.
+**Current tabs:**
+
+| Tab | Label | SF Symbol | Role | View |
+|---|---|---|---|---|
+| 1 | Feed | `rectangle.stack.fill` | Standard | `FeedView()` |
+| 2 | Map | `location.fill` | Standard | `MapView()` |
+| 3 | Profile | `person.fill` | Standard | `ProfileView()` |
+| 4 | Search | `magnifyingglass` | `.search` | `SearchView()` |
+
+The Search tab uses `role: .search`, which enables the iOS 26 native search tab behaviour.
+
+**Passing dependencies to tabs:**
+`MainTabView` receives `AppContainer`. Individual feature Views receive only the specific dependencies they need (e.g., `FeedView` would receive a `FeedViewModel` or `APIClient` — not the entire container). This is an application of the principle of least knowledge.
+
+**`MainTabView` lives in `App/`**, not in any feature folder, because the tab structure is an application-level concern. A change to which tabs exist is a change to the app, not to any one feature.
 
 ---
 
-## Navigation Rules
+## Lifecycle Events
 
-- **No imperative navigation.** Never call `UINavigationController.pushViewController`. Use `NavigationLink` or `.navigationDestination`.
-- **No cross-feature push.** A feature that needs to present content from another feature must use a shared model, not import the feature directly.
-- **`RootView` is the only state switch.** No other view should conditionally render Auth vs. authenticated content.
-- **`AppContainer` is passed explicitly.** Features that need services receive them through their ViewModel's initialiser, not by reaching back up to `AppContainer`.
+### App Launch
+```
+1. JordaniaTeamApp initialises AppContainer
+2. SessionStore.init reads Keychain → sets initial state (.authenticated or .signedOut)
+3. RootView renders based on initial state
+4. .task fires: AppContainer.bootstrap() + SessionStore.validateSession()
+5. validateSession() calls UserService.fetchCurrentUser()
+   → Success: currentUser refreshed, state stays .authenticated
+   → 401: signOut() called, state → .signedOut
+   → Network failure: warning logged, state unchanged (offline tolerance)
+```
+
+### Returning to Foreground
+```
+.onChange(of: scenePhase) — triggers when phase == .active
+  → SessionStore.validateSession()
+  → Same outcomes as launch validation
+```
+This ensures stale sessions are caught when the user returns to the app after an extended background period.
+
+### Sign Out
+```
+AuthViewModel.signOut()
+  → GoogleAuthService.signOut() (if provider == .google)
+  → SessionStore.signOut()
+    → state = .signedOut (immediate, before Keychain clear)
+    → KeychainService.clearAll() (best-effort; failure is logged, not shown to user)
+  → RootView observes state change → renders AuthView
+```
+
+---
+
+## Adding a New Tab
+
+1. Create the feature folder under `Features/<NewFeature>/Views/`.
+2. Implement `<NewFeature>View`.
+3. Add a `Tab` entry to `MainTabView.body`.
+4. Pass the required dependency from `AppContainer` to the new View.
+5. If the new tab requires a new service, add it to `AppContainer.init`.
+
+No changes to `RootView` or `SessionStore` are required to add a tab.

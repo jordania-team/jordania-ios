@@ -1,8 +1,8 @@
 # Engineering Rules
 
-**Purpose:** The authoritative, non-negotiable list of constraints that every contributor must follow. These rules exist to keep the codebase consistent, safe, and maintainable.
+**Purpose:** Non-negotiable constraints that every contributor must follow. The single authoritative list of what is forbidden and what is required in this codebase.
 
-**Scope:** Mandatory rules only — what is forbidden and what is required. Preferences and guidelines live in `ios/`. The reasoning behind each rule is here; broader context lives in [PROJECT_PHILOSOPHY.md](../PROJECT_PHILOSOPHY.md).
+**Scope:** Mandatory rules only. Guidelines and style preferences live in `ios/`. Broader rationale for these decisions lives in [PROJECT_PHILOSOPHY.md](../PROJECT_PHILOSOPHY.md). Specific decision history lives in [DECISION_LOG.md](DECISION_LOG.md).
 
 ---
 
@@ -10,7 +10,7 @@
 
 1. [Platform Baseline](#platform-baseline)
 2. [Code Organisation](#code-organisation)
-3. [Dependency Management](#dependency-management)
+3. [Dependency Injection](#dependency-injection)
 4. [Concurrency](#concurrency)
 5. [Data Ownership](#data-ownership)
 6. [Forbidden Patterns](#forbidden-patterns)
@@ -19,52 +19,68 @@
 
 ## Platform Baseline
 
-- **Swift 6.** The project compiles with Swift 6 language mode. Strict concurrency checking is always enabled.
-- **iOS 26+ deployment target.** No `#available` guards, no conditional API usage, no backward-compatibility shims — ever. If a new API requires iOS 26, use it unconditionally.
-- **Latest stable Xcode and iOS SDK.** Always build against the newest released toolchain. Never pin to an older SDK to work around warnings.
-- **`@Observable` is the only observation mechanism.** `ObservableObject`, `@Published`, and Combine observation are forbidden for new code.
-- **`async`/`await` is the only concurrency model.** Completion handlers, `DispatchQueue`, `NotificationCenter` callbacks, and Combine pipelines are forbidden for new async work.
+The project targets **Swift 6** and **iOS 26+** exclusively. There is no compatibility floor below this.
+
+- **Never introduce `#available` guards** unless an Apple API explicitly requires it for a new iOS 26 feature. Guarding for older OS versions is forbidden.
+- **Never write backward-compatible code.** If a new API ships in iOS 26, use it unconditionally.
+- **Always use the latest stable Xcode and iOS SDK.** No pinning to older toolchain versions.
+- **Swift 6 strict concurrency is always on.** Zero data-race warnings are a build requirement, not a goal.
+- `@Observable` is the only observation mechanism. `ObservableObject`, `@Published`, and Combine are forbidden for new code.
+- Structured concurrency (`async`/`await`, `Task`, `TaskGroup`) is the only concurrency model. Callbacks, completion handlers, and `DispatchQueue` are forbidden for new code.
 
 ---
 
 ## Code Organisation
 
-- **Feature models live inside their feature folder.** There is no global `Models/` directory. A model that belongs to a feature is co-located with that feature.
-- **Session models live in `Core/Session/`.** `AuthenticatedUser`, `SessionState`, `SessionStore`, and `SessionPersistence` are the sole exception to the rule above — they are cross-cutting concerns owned by the core layer.
-- **`Shared/` is UI-only.** Only reusable SwiftUI components and design-system tokens belong in `Shared/`. Business logic, services, and models must never be placed there.
-- **`MainTabView` lives in `App/`.** It coordinates top-level navigation and is an application-layer concern, not a feature.
-- **One type per file.** Each Swift file declares exactly one primary type. Nested private helpers inside the same file are acceptable.
-- **File names match their primary type.** `AuthViewModel.swift` contains `AuthViewModel`. No exceptions.
+File placement is determined by feature ownership, not by type.
+
+| What | Where | Rationale |
+|---|---|---|
+| App entry point, `AppContainer`, `RootView`, `MainTabView` | `App/` | Application-level concerns belong at the app layer |
+| Session models (`AuthenticatedUser`, `SessionStore`, `SessionState`, `SessionPersistence`) | `Core/Session/` | Session is cross-cutting; it belongs in Core, not in any feature |
+| Auth services (`AppleAuthService`, `GoogleAuthService`, `BackendAuthService`, `TokenProvider`) | `Core/Authentication/` | Auth infrastructure is cross-cutting |
+| Networking (`APIClient`, `NetworkError`) | `Core/Networking/` | Shared infrastructure |
+| Security (`KeychainService`, `JWT`) | `Core/Security/` | Shared infrastructure |
+| Feature-specific ViewModels and Views | `Features/<FeatureName>/ViewModels/` and `Features/<FeatureName>/Views/` | Models and ViewModels belong to the feature that owns them |
+| Reusable UI components and design tokens | `Shared/` | UI-only; contains no business logic |
+
+**Violation examples:**
+- A `Models/` folder at the project root → **forbidden**.
+- A ViewModel placed in `Shared/` → **forbidden**.
+- A feature-specific model placed in `Core/` → **forbidden** unless it is genuinely cross-cutting.
 
 ---
 
-## Dependency Management
+## Dependency Injection
 
-- **All dependencies are injected through initialisers.** No property wrapper injection, no ambient context, no environment-based service lookup outside of SwiftUI's native `.environment()` for `SessionStore`.
-- **`AppContainer` is the single composition root.** It is instantiated once by `JordaniaTeamApp` and propagated explicitly. Nothing else constructs the dependency graph.
-- **No Service Locator.** A global registry that types call into to retrieve their dependencies is forbidden. Callers must not know about `AppContainer` — they receive only what they need.
-- **No third-party DI framework.** Dependency injection is done with plain Swift initialisers. No Swinject, Needle, Factory, or equivalent.
-- **No premature modularisation.** The project is a single target. Swift Package Manager modules are not introduced until a clear need emerges and is explicitly decided.
-- **Third-party SDKs are isolated behind internal wrappers.** `GoogleAuthService` wraps the GoogleSignIn SDK. Feature code never imports `GoogleSignIn` directly.
+- **Initialiser injection is the only permitted DI mechanism.** Dependencies are always passed through `init` parameters.
+- **`AppContainer` is the single composition root.** It is instantiated once in `JordaniaTeamApp` and never recreated.
+- **No Service Locator.** No global accessor, no `shared` singleton, no environment-based registry (except `@Environment` for SwiftUI system values).
+- **No DI framework.** No Swinject, Needle, or equivalent.
+- **`AppContainer` receives `SessionStore` by reference** — downstream types hold `weak var sessionStore: SessionStore?` to avoid retain cycles.
+- Protocols are not required for DI. Concrete types are injected directly. Protocols are introduced only when a genuine abstraction boundary exists, not to enable injection.
+
+See [DEPENDENCY_INJECTION.md](../ios/DEPENDENCY_INJECTION.md) for the full pattern reference.
 
 ---
 
 ## Concurrency
 
-- **No data races.** The project compiles with strict concurrency enabled. Every type must be `Sendable` or isolated to an actor. Warnings are errors.
-- **`@MainActor` on all `@Observable` ViewModels and `SessionStore`.** State that drives the UI must be updated on the main actor.
-- **`actor` for shared mutable state accessed from multiple tasks.** `APIClient` and `TokenProvider` are actors. Any new type with shared mutable state that is accessed concurrently must also be an actor.
-- **One refresh task at a time.** `TokenProvider` coalesces concurrent refresh requests via a stored `Task<String, Error>?`. This pattern must be preserved if `TokenProvider` is ever modified.
-- **`Task` cancellation must be handled.** `AuthError.cancelled` and `NetworkError.cancelled` are silent — they must never produce a UI error message. Any new operation that can be cancelled must follow this convention.
+- **`@MainActor` is required on `SessionStore` and `AppContainer`.** All state mutations that drive the UI must run on the main actor.
+- **`actor` isolation is required for `APIClient` and `TokenProvider`.** These types manage shared mutable state (the in-flight refresh task) and must be actors.
+- **`Task { }` in a `@MainActor` context inherits the main actor.** No explicit `await MainActor.run { }` is needed inside Views or `@MainActor` classes.
+- **Never block the main actor.** All network calls and Keychain I/O go through `async` methods.
+- **`Sendable` conformance must be explicit** on any type that crosses actor boundaries. No `@unchecked Sendable` without a documented justification.
+- **Cancellation is always handled.** `Task` cancellation and `AuthError.cancelled` / `NetworkError.cancelled` are caught silently — they never produce UI error messages.
 
 ---
 
 ## Data Ownership
 
-- **`SessionStore` is the single source of truth for authentication state.** No other type stores a copy of the current user or the session state. Features observe `SessionStore.currentUser` and `SessionStore.state` directly.
-- **JWTs are never exposed as observable properties.** The access token and refresh token live exclusively in the Keychain, accessed only through `SessionPersistence`. The UI layer never reads a token.
-- **State mutations happen inside the owning type.** `SessionStore.signIn()` and `SessionStore.signOut()` are the only entry points for state changes. External callers do not mutate `currentUser` or `state` directly.
-- **`private(set)` on all observable state.** Properties that should not be mutated from outside a type must be declared `private(set)`.
+- **`SessionStore` is the single source of truth for authentication state.** No other type stores a copy of `SessionState` or `AuthenticatedUser` that it mutates independently.
+- **JWTs are never stored in observable properties.** Access tokens and refresh tokens live exclusively in the Keychain, accessed only by `SessionPersistence` and `TokenProvider`. The UI never reads a token.
+- **State flows in one direction:** `AppContainer` composes → `SessionStore` owns state → `RootView` reads state → Views reflect state. Mutations travel back up only through explicit action methods (`signIn`, `signOut`, `validateSession`).
+- **DTOs are private to their service file.** A `UserMeResponse` struct is `private` inside `UserService.swift`. It is never exported or reused outside its file.
 
 ---
 
@@ -72,13 +88,14 @@
 
 | Pattern | Reason |
 |---|---|
-| `Singleton` (other than `AppContainer`) | Creates hidden dependencies and untestable code |
-| Global mutable state | Violates strict concurrency; causes data races |
-| Force unwrap (`!`) in production code | Use `guard`, `if let`, or throw |
-| `ObservableObject` / `@Published` | Superseded by `@Observable` in Swift 5.9+ / iOS 17+ |
-| Completion handlers for async work | Superseded by `async`/`await` |
-| Combine pipelines for new code | `async`/`await` + `@Observable` replace all use cases |
-| Protocol-per-concrete-type abstraction | Only add protocols when a real second conformer exists |
-| `#available` version guards | Target is iOS 26+; guards are dead code |
-| Business logic in Views | Views render state; logic lives in ViewModels or services |
-| Models in `Shared/` | `Shared/` is UI-only |
+| Global singletons (other than `AppContainer` via `@main`) | Untestable, hidden coupling |
+| `UserDefaults` for any sensitive data | Not encrypted; use Keychain |
+| Force unwrap (`!`) in production code | Crashes instead of recoverable errors; use `guard`/`if let` |
+| `ObservableObject` / `@Published` / Combine | Superseded by `@Observable` (Swift 6) |
+| Callbacks and completion handlers | Superseded by `async`/`await` |
+| `DispatchQueue` for concurrency | Use `actor` or structured concurrency |
+| Premature modularisation into Swift packages | No business case yet; increases build complexity for no gain |
+| Feature code importing another feature | Features are independent; shared code lives in `Core/` or `Shared/` |
+| View importing a service directly | Views interact only with their ViewModel |
+| Service Locator / global container lookup | See [Dependency Injection](#dependency-injection) |
+| `#available` guards for iOS < 26 | Platform baseline is iOS 26; older versions are not supported |
