@@ -19,7 +19,7 @@
 - [ADR-007 — Keychain as the Sole Storage for Tokens](#adr-007)
 - [ADR-008 — No Premature Swift Package Modularisation](#adr-008)
 - [ADR-009 — iOS 26+ Baseline; No Backward Compatibility Code](#adr-009)
-- [ADR-010 — MainTabView lives in App/, not Features/](#adr-010)
+- [ADR-010 — MainTabView Lives in App/, Not Features/](#adr-010)
 
 ---
 
@@ -88,7 +88,7 @@
 
 **Decision:** All ViewModels and shared state objects use `@Observable`. `ObservableObject` and `@Published` are forbidden for new code.
 
-**Consequences:** Fine-grained observation (only properties actually read by a View trigger re-renders), simpler syntax, better performance. Requires iOS 17+, which is below the iOS 26+ baseline.
+**Consequences:** Fine-grained observation (only properties actually read by a View trigger re-renders), simpler syntax, better performance. Requires iOS 17+, which is well below the iOS 26+ baseline.
 
 ---
 
@@ -98,11 +98,11 @@
 **Date:** June 2026  
 **Status:** Accepted
 
-**Context:** The team debated whether to wrap services (e.g., `BackendAuthService`, `UserService`) behind protocols to allow mocking in tests.
+**Context:** The team debated whether to wrap services behind protocols to enable mocking in tests.
 
-**Decision:** No protocol is introduced unless a real second conformer exists or is planned for the immediate next sprint. Mocking for tests is done via subclassing, parameter injection of lightweight structs, or by testing observable state changes directly.
+**Decision:** No protocol is introduced unless a real second conformer exists or is planned for the immediate next sprint. Testing uses lightweight struct injection, subclassing, or direct observation of `@Observable` state.
 
-**Consequences:** Less indirection, faster reading. The trade-off is that some unit tests require slightly more setup. Accepted: the project values simplicity over test infrastructure complexity.
+**Consequences:** Less indirection, faster reading. The trade-off is that some unit tests require slightly more setup. Accepted: simplicity over test infrastructure complexity.
 
 ---
 
@@ -112,11 +112,11 @@
 **Date:** June 2026  
 **Status:** Accepted
 
-**Context:** Authenticated apps must handle token expiry gracefully. Common approaches include middleware interceptors, per-request retry logic, or a centralised token manager.
+**Context:** Authenticated apps must handle token expiry gracefully without leaking refresh logic into every service.
 
-**Decision:** `APIClient` (an `actor`) handles the full refresh lifecycle: (1) proactive refresh via `TokenProvider.validAccessToken()` before every request, (2) reactive refresh via `forceRefresh()` on a 401, (3) terminal signout on a second 401. `TokenProvider` coalesces concurrent refresh requests.
+**Decision:** `APIClient` (an `actor`) owns the full refresh lifecycle: (1) proactive refresh via `TokenProvider.validAccessToken()` before every request, (2) reactive refresh via `forceRefresh()` on a 401, (3) terminal signout on a second 401. `TokenProvider` coalesces concurrent refresh requests via a shared `Task<String, Error>`.
 
-**Consequences:** All token management is in two files (`APIClient.swift`, `TokenProvider.swift`). Services are unaware of authentication mechanics. The coalescing pattern prevents duplicate refresh calls under concurrent load. Maximum one network retry per request.
+**Consequences:** All token management is in two files. Services are unaware of authentication mechanics. Maximum one network retry per request.
 
 ---
 
@@ -128,9 +128,9 @@
 
 **Context:** Tokens could be stored in `UserDefaults`, files, or the Keychain.
 
-**Decision:** All tokens (access and refresh) are stored in the Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. `UserDefaults` is used only for non-sensitive, temporary data (e.g., Apple's one-time full name delivery).
+**Decision:** All tokens (access and refresh) are stored exclusively in the Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. `UserDefaults` is reserved for non-sensitive, temporary data only (e.g., Apple's one-time full name delivery).
 
-**Consequences:** Tokens survive app reinstallation within the same device, are excluded from unencrypted backups, and are unavailable before first unlock. The `ThisDeviceOnly` flag prevents iCloud Keychain migration.
+**Consequences:** Tokens survive app reinstallation on the same device, are excluded from unencrypted backups, and are unavailable before first unlock. The `ThisDeviceOnly` flag prevents iCloud Keychain migration to other devices.
 
 ---
 
@@ -140,11 +140,11 @@
 **Date:** May 2026  
 **Status:** Accepted
 
-**Context:** Modularising into Swift packages provides build-time isolation and enforces boundaries but adds complexity.
+**Context:** Modularising into Swift packages enforces compile-time boundaries but adds build complexity.
 
-**Decision:** The project is and remains a single target until a concrete need for modularisation emerges (e.g., a separate app extension that must share code).
+**Decision:** The project is and remains a single target. Folder conventions (`App/`, `Core/`, `Features/`, `Shared/`) enforce the same logical boundaries without tooling overhead.
 
-**Consequences:** Simpler build setup, faster compile times for a small codebase. Folder conventions (`App/`, `Core/`, `Features/`, `Shared/`) enforce the same logical boundaries without the tooling overhead.
+**Consequences:** Simpler build setup, faster incremental compilation. No module-per-feature unless a concrete need emerges (e.g., a widget extension that must share code).
 
 ---
 
@@ -154,4 +154,22 @@
 **Date:** May 2026  
 **Status:** Accepted
 
-**Context:** Supporting older iOS versions requires `#available` guards, deprecated 
+**Context:** Supporting older iOS versions requires `#available` guards, deprecated API alternatives, and design compromises.
+
+**Decision:** The deployment target is iOS 26. No `#available` checks, no conditional API usage, and no compatibility shims are ever introduced. The latest stable API is always used unconditionally.
+
+**Consequences:** The codebase is simpler and uses the best available APIs. The trade-off is that the app cannot run on devices below iOS 26, which is acceptable given the academic context and the explicit project goal of learning modern iOS engineering.
+
+---
+
+## ADR-010
+### MainTabView Lives in App/, Not Features/
+
+**Date:** June 2026  
+**Status:** Accepted
+
+**Context:** `MainTabView` coordinates the top-level tab structure of the authenticated experience. It could reasonably be placed in `Features/` alongside other screens.
+
+**Decision:** `MainTabView` lives in `App/` because it is an application-shell concern, not a feature. It owns no business logic, delegates to feature views, and is only meaningful in the context of the full app.
+
+**Consequences:** `App/` is the single place to understand the application's top-level structure. Features remain unaware of tab layout decisions.
