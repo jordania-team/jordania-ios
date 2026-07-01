@@ -11,9 +11,9 @@ import Foundation
 /// A SessionStore e o TokenProvider delegam persistência para cá.
 nonisolated final class SessionPersistence: Sendable {
 
-    private let keychain: KeychainService
+    private let keychain: KeychainServiceProtocol
 
-    init(keychain: KeychainService = KeychainService()) {
+    init(keychain: any KeychainServiceProtocol = KeychainService()) {
         self.keychain = keychain
     }
 
