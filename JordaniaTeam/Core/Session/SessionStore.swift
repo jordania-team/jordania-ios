@@ -1,6 +1,6 @@
 //
 //  SessionStore.swift
-//  JordaniaTeamA
+//  JordaniaTeam
 //
 //  Created by Gabriel Ferrari on 31/05/26.
 //
@@ -21,8 +21,7 @@ final class SessionStore {
     // MARK: - State
 
     private(set) var currentUser: AuthenticatedUser?
-    var isLoading: Bool = false
-    var authError: AuthError?
+    private(set) var state: SessionState = .loading
 
     // MARK: - Dependencies
 
@@ -32,33 +31,27 @@ final class SessionStore {
 
     init(persistence: SessionPersistence = SessionPersistence()) {
         self.persistence = persistence
-        self.currentUser = persistence.loadSession()
-    }
-
-    // MARK: - Computed
-
-    var isSignedIn: Bool {
-        currentUser != nil
+        let saved = persistence.loadSession()
+        self.currentUser = saved
+        self.state = saved != nil ? .authenticated : .signedOut
     }
 
     // MARK: - Actions
 
     func signIn(user: AuthenticatedUser, accessToken: String, refreshToken: String) {
-        isLoading = false
-        authError = nil
         do {
             try persistence.save(user: user, accessToken: accessToken, refreshToken: refreshToken)
             currentUser = user
+            state = .authenticated
         } catch {
-            authError = .failed("Não foi possível salvar a sessão com segurança.")
+            state = .error("Não foi possível salvar a sessão com segurança.")
         }
     }
 
     /// A UI sempre desloga, mesmo se a limpeza do Keychain falhar.
     func signOut() {
-        isLoading = false
         currentUser = nil
-        authError = nil
+        state = .signedOut
         do {
             try persistence.clearAll()
         } catch {
@@ -66,21 +59,23 @@ final class SessionStore {
         }
     }
 
-    func setError(_ error: AuthError) {
-        isLoading = false
-        authError = error
-    }
-
     func validateSession(using userService: UserService) async {
-        guard isSignedIn else { return }
+        guard currentUser != nil else { return }
 
         do {
             let freshUser = try await userService.fetchCurrentUser()
             currentUser = freshUser
+            state = .authenticated
         } catch NetworkError.unauthorized {
             signOut()
         } catch {
             Self.logger.warning("Validação de sessão falhou — mantendo estado local: \(error)")
+            // Mantém .authenticated para não deslogar o usuário por falha de rede
         }
+    }
+
+    func retry(using userService: UserService) async {
+        state = .loading
+        await validateSession(using: userService)
     }
 }

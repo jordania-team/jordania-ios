@@ -11,8 +11,19 @@
 		693F10202FCD2546007C635A /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 693F101F2FCD2546007C635A /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		69A785212FF53ED0001905DC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 693F0FD22FCD1239007C635A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 693F0FD92FCD1239007C635A;
+			remoteInfo = JordaniaTeam;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
-		694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		69A784842FEECDD3001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = JordaniaTeam.app; path = "/Users/ferrari/Xcode/jordania-ios/build/Debug-iphoneos/JordaniaTeam.app"; sourceTree = "<absolute>"; };
+		69A7851D2FF53ED0001905DC /* JordaniaTeamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JordaniaTeamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -34,6 +45,11 @@
 			path = JordaniaTeam;
 			sourceTree = "<group>";
 		};
+		69A7851E2FF53ED0001905DC /* JordaniaTeamTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = JordaniaTeamTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +62,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		69A7851A2FF53ED0001905DC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,7 +76,8 @@
 			isa = PBXGroup;
 			children = (
 				693F0FDC2FCD1239007C635A /* JordaniaTeam */,
-				694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */,
+				69A7851D2FF53ED0001905DC /* JordaniaTeamTests.xctest */,
+				69A7851E2FF53ED0001905DC /* JordaniaTeamTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -81,8 +105,31 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 694D9CE72FE2C56E008B6DFA /* JordaniaTeam.app */;
+			productReference = 69A784842FEECDD3001905DC /* JordaniaTeam.app */;
 			productType = "com.apple.product-type.application";
+		};
+		69A7851C2FF53ED0001905DC /* JordaniaTeamTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 69A785232FF53ED0001905DC /* Build configuration list for PBXNativeTarget "JordaniaTeamTests" */;
+			buildPhases = (
+				69A785192FF53ED0001905DC /* Sources */,
+				69A7851A2FF53ED0001905DC /* Frameworks */,
+				69A7851B2FF53ED0001905DC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				69A785222FF53ED0001905DC /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				69A7851E2FF53ED0001905DC /* JordaniaTeamTests */,
+			);
+			name = JordaniaTeamTests;
+			packageProductDependencies = (
+			);
+			productName = JordaniaTeamTests;
+			productReference = 69A7851D2FF53ED0001905DC /* JordaniaTeamTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -91,11 +138,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2650;
-				LastUpgradeCheck = 2650;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					693F0FD92FCD1239007C635A = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					69A7851C2FF53ED0001905DC = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 693F0FD92FCD1239007C635A;
 					};
 				};
 			};
@@ -117,12 +168,20 @@
 			projectRoot = "";
 			targets = (
 				693F0FD92FCD1239007C635A /* JordaniaTeam */,
+				69A7851C2FF53ED0001905DC /* JordaniaTeamTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		693F0FD82FCD1239007C635A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		69A7851B2FF53ED0001905DC /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -139,7 +198,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		69A785192FF53ED0001905DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		69A785222FF53ED0001905DC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 693F0FD92FCD1239007C635A /* JordaniaTeam */;
+			targetProxy = 69A785212FF53ED0001905DC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		693F0FE52FCD123A007C635A /* Debug */ = {
@@ -201,6 +275,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -258,6 +333,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -331,6 +407,50 @@
 			};
 			name = Release;
 		};
+		69A785242FF53ED0001905DC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8U8DA8Q3L6;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rodrigoborges.TarefasPOC.Tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JordaniaTeam.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JordaniaTeam";
+			};
+			name = Debug;
+		};
+		69A785252FF53ED0001905DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8U8DA8Q3L6;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rodrigoborges.TarefasPOC.Tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JordaniaTeam.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JordaniaTeam";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -348,6 +468,15 @@
 			buildConfigurations = (
 				693F0FE82FCD123A007C635A /* Debug */,
 				693F0FE92FCD123A007C635A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		69A785232FF53ED0001905DC /* Build configuration list for PBXNativeTarget "JordaniaTeamTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				69A785242FF53ED0001905DC /* Debug */,
+				69A785252FF53ED0001905DC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -1,6 +1,6 @@
 //
 //  RootView.swift
-//  JordaniaTeamA
+//  JordaniaTeam
 //
 //  Created by Gabriel Ferrari on 12/06/26.
 //
@@ -8,22 +8,25 @@
 import SwiftUI
 
 /// Ponto de entrada da navegação.
-/// Decide entre tela de login e tela de tarefas com base no estado da sessão.
+/// Decide entre AuthView, PetOnboardingView ou MainTabView
+/// com base no estado da sessão.
 struct RootView: View {
 
-    let sessionStore: SessionStore
-    let apiClient: APIClient
-    let authViewModel: AuthViewModel
+    let container: AppContainer
 
     var body: some View {
-        if sessionStore.isSignedIn {
-            TasksView(
-                apiClient: apiClient,
-                onSignOut: { authViewModel.signOut() }
-            )
-        } else {
-            AuthView(session: sessionStore)
-                .environment(sessionStore)
+        switch container.sessionStore.state {
+        case .loading:
+            ProgressView()
+        case .authenticated:
+            MainTabView(container: container)
+        case .signedOut:
+            AuthView(session: container.sessionStore)
+                .environment(container.sessionStore)
+        case .error(let message):
+            SessionErrorView(message: message) {
+                Task { await container.sessionStore.retry(using: container.userService) }
+            }
         }
     }
 }

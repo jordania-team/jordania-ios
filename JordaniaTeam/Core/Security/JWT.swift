@@ -9,7 +9,7 @@ import Foundation
 
 /// Leitura local de claims do JWT — apenas para decisões de UX (ex: refresh proativo antes de expirar).
 /// A validação real de assinatura é sempre do backend.
-enum JWT {
+nonisolated enum JWT {
 
     /// Margem de segurança: token a menos de 30 s de expirar é tratado como expirado,
     /// evitando 401 na primeira chamada após o launch.
