@@ -7,7 +7,7 @@
 
 /// Abstração de persistência de sessão.
 /// Permite substituição por test doubles sem entitlements de Keychain.
-protocol SessionPersistenceProtocol: Sendable {
+nonisolated protocol SessionPersistenceProtocol: Sendable {
     func loadSession() -> AuthenticatedUser?
     func loadAccessToken() -> String?
     func loadRefreshToken() -> String?

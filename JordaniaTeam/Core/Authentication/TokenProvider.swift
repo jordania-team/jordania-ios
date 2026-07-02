@@ -1,6 +1,6 @@
 //
 //  TokenProvider.swift
-//  JordaniaTeamA
+//  JordaniaTeam
 //
 //  Created by Gabriel Ferrari on 23/06/26.
 //
@@ -12,23 +12,23 @@ import OSLog
 ///
 /// Responsabilidades:
 /// - Refresh proativo: detecta que o access token expira em < 10 min e renova antes de falhar
-/// - Coalescing: se várias chamadas simultaneâneas precisarem de refresh, apenas uma Task é criada
+/// - Coalescing: se várias chamadas simultâneas precisarem de refresh, apenas uma Task é criada
 ///   e as demais aguardam o mesmo resultado — evita condições de corrida e refreshes duplos
 /// - Delega estado de sessão para SessionStore via signOut() — não toma decisões de UI
 actor TokenProvider {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "TokenProvider")
 
-    private let persistence: SessionPersistence
-    private let authService: BackendAuthService
+    private let persistence: any SessionPersistenceProtocol
+    private let authService: any BackendAuthServiceProtocol
     private weak var sessionStore: SessionStore?
 
     /// Task de refresh em curso; nil quando nenhum refresh está ativo.
     private var refreshTask: Task<String, Error>?
 
     init(
-        persistence: SessionPersistence,
-        authService: BackendAuthService,
+        persistence: any SessionPersistenceProtocol = SessionPersistence(),
+        authService: any BackendAuthServiceProtocol = BackendAuthService(),
         sessionStore: SessionStore
     ) {
         self.persistence  = persistence
@@ -101,7 +101,6 @@ actor TokenProvider {
             Self.logger.info("Refresh concluído com sucesso.")
             return session.accessToken
         } catch AuthError.sessionExpired {
-            // Backend rejeitou o refresh (401 ou reuse detectado) — terminal
             Self.logger.error("Refresh rejeitado pelo backend — deslogando.")
             await sessionStore?.signOut()
             throw NetworkError.unauthorized
