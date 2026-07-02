@@ -22,8 +22,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		69A784842FEECDD3001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = JordaniaTeam.app; path = "/Users/ferrari/Xcode/jordania-ios/build/Debug-iphoneos/JordaniaTeam.app"; sourceTree = "<absolute>"; };
 		69A7851D2FF53ED0001905DC /* JordaniaTeamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JordaniaTeamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		69A785302FF5663B001905DC /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -78,6 +78,7 @@
 				693F0FDC2FCD1239007C635A /* JordaniaTeam */,
 				69A7851D2FF53ED0001905DC /* JordaniaTeamTests.xctest */,
 				69A7851E2FF53ED0001905DC /* JordaniaTeamTests */,
+				69A785302FF5663B001905DC /* JordaniaTeam.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,7 +106,7 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 69A784842FEECDD3001905DC /* JordaniaTeam.app */;
+			productReference = 69A785302FF5663B001905DC /* JordaniaTeam.app */;
 			productType = "com.apple.product-type.application";
 		};
 		69A7851C2FF53ED0001905DC /* JordaniaTeamTests */ = {

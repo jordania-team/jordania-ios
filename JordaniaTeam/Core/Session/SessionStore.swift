@@ -10,7 +10,7 @@ import Observation
 import OSLog
 
 /// Fonte única de verdade do estado de autenticação.
-/// Delega persistência para SessionPersistence — não conhece Keychain diretamente.
+/// Delega persistência para SessionPersistenceProtocol — não conhece Keychain diretamente.
 /// O JWT nunca é exposto em propriedades observáveis — a UI não precisa dele.
 @Observable
 @MainActor
@@ -25,11 +25,11 @@ final class SessionStore {
 
     // MARK: - Dependencies
 
-    private let persistence: SessionPersistence
+    private let persistence: any SessionPersistenceProtocol
 
     // MARK: - Init
 
-    init(persistence: SessionPersistence = SessionPersistence()) {
+    init(persistence: any SessionPersistenceProtocol = SessionPersistence()) {
         self.persistence = persistence
         let saved = persistence.loadSession()
         self.currentUser = saved
@@ -59,7 +59,7 @@ final class SessionStore {
         }
     }
 
-    func validateSession(using userService: UserService) async {
+    func validateSession(using userService: any UserServiceProtocol) async {
         guard currentUser != nil else { return }
 
         do {
@@ -70,11 +70,10 @@ final class SessionStore {
             signOut()
         } catch {
             Self.logger.warning("Validação de sessão falhou — mantendo estado local: \(error)")
-            // Mantém .authenticated para não deslogar o usuário por falha de rede
         }
     }
 
-    func retry(using userService: UserService) async {
+    func retry(using userService: any UserServiceProtocol) async {
         state = .loading
         await validateSession(using: userService)
     }
