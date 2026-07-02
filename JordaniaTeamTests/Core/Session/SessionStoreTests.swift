@@ -18,14 +18,16 @@ final class StubSessionPersistence: SessionPersistenceProtocol, @unchecked Senda
 
     var stubbedSession: AuthenticatedUser?
     var shouldThrowOnSave: Bool = false
+    var _stubbedAccessToken:  String?
+    var _stubbedRefreshToken: String?
 
     init(stubbedSession: AuthenticatedUser? = nil) {
         self.stubbedSession = stubbedSession
     }
 
     nonisolated func loadSession() -> AuthenticatedUser? { stubbedSession }
-    nonisolated func loadAccessToken() -> String? { nil }
-    nonisolated func loadRefreshToken() -> String? { nil }
+    nonisolated func loadAccessToken()  -> String? { _stubbedAccessToken }
+    nonisolated func loadRefreshToken() -> String? { _stubbedRefreshToken }
 
     nonisolated func save(user: AuthenticatedUser, accessToken: String, refreshToken: String) throws {
         if shouldThrowOnSave { throw AuthError.failed("save failed") }
