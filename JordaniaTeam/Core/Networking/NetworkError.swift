@@ -20,6 +20,7 @@ enum NetworkError: LocalizedError, Equatable {
     case decodingError
     case encodingError
     case serverError(statusCode: Int)
+    case unknown
 
     var errorDescription: String? {
         switch self {
@@ -31,6 +32,7 @@ enum NetworkError: LocalizedError, Equatable {
         case .decodingError:   return "Erro ao interpretar dados do servidor."
         case .encodingError:   return "Erro ao preparar dados para envio."
         case .serverError:     return "O servidor está indisponível no momento. Tente mais tarde."
+        case .unknown:         return "Ocorreu um erro inesperado. Tente novamente."
         }
     }
 
@@ -43,7 +45,7 @@ enum NetworkError: LocalizedError, Equatable {
         case .cancelled:
             self = .cancelled
         default:
-            self = .invalidResponse
+            self = .unknown
         }
     }
 }
