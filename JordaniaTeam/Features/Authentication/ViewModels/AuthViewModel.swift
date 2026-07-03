@@ -9,26 +9,51 @@ import AuthenticationServices
 import Foundation
 import Observation
 
+// MARK: - Protocols (enable test-double injection per TESTING.md)
+
+/// Interface mínima de AppleAuthService exigida pelo AuthViewModel.
+@MainActor
+protocol AppleAuthServicing: AnyObject {
+    func prepareNonce() -> String
+    func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthSession
+}
+
+/// Interface mínima de GoogleAuthServicing exigida pelo AuthViewModel.
+@MainActor
+protocol GoogleAuthServicing: AnyObject {
+    func signIn() async throws -> AuthSession
+    func signOut()
+}
+
+// MARK: - Conformances
+
+extension AppleAuthService: AppleAuthServicing {}
+extension GoogleAuthService: GoogleAuthServicing {}
+
+// MARK: - ViewModel
+
 /// Orquestra o fluxo de autenticação: services de provider + atualização da SessionStore.
 /// A View só dispara ações e reflete estado — nunca toca os services diretamente.
 @Observable
 @MainActor
 final class AuthViewModel {
 
-    // MARK: - Dependencies
+    // MARK: - State
     var isLoading: Bool = false
     var errorMessage: String? = nil
     private var signInTask: Task<Void, Never>?
+
+    // MARK: - Dependencies
     private let session: SessionStore
-    private let appleAuthService: AppleAuthService
-    private let googleAuthService: GoogleAuthService
+    private let appleAuthService: any AppleAuthServicing
+    private let googleAuthService: any GoogleAuthServicing
 
     // MARK: - Init
 
     init(
         session: SessionStore,
-        appleAuthService: AppleAuthService? = nil,
-        googleAuthService: GoogleAuthService? = nil
+        appleAuthService: (any AppleAuthServicing)? = nil,
+        googleAuthService: (any GoogleAuthServicing)? = nil
     ) {
         self.session = session
         self.appleAuthService = appleAuthService ?? AppleAuthService()
