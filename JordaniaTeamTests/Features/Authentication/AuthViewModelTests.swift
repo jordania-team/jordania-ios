@@ -10,54 +10,19 @@ import Testing
 
 @testable import JordaniaTeam
 
-// MARK: - Mock: AppleAuthServicing
-
-/// Mock de AppleAuthServicing para uso exclusivo em testes.
-/// Nunca lança por padrão; configure `stubbedResult` para simular
-/// sucesso, cancelamento ou erros de rede.
-@MainActor
-final class MockAppleAuthService: AppleAuthServicing {
-
-    /// Número de vezes que `handle` foi chamado.
-    private(set) var handleCallCount = 0
-
-    /// Resultado a retornar. Se `nil`, bloqueia até que `resume()` seja
-    /// chamado — permite observar `isLoading == true` de forma determinística.
-    var stubbedResult: Result<AuthSession, Error>? = .success(AuthSession.stub)
-
-    /// Continuation usada quando `stubbedResult == nil`.
-    private var pendingContinuation: CheckedContinuation<AuthSession, Error>?
-
-    func prepareNonce() -> String { "stub-nonce" }
-
-    func handle(_ result: Result<ASAuthorization, Error>) async throws -> AuthSession {
-        handleCallCount += 1
-        if let stubbedResult {
-            return try stubbedResult.get()
-        }
-        // Modo bloqueante: suspende até resume() ser chamado pelo teste.
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingContinuation = continuation
-        }
-    }
-
-    /// Libera a continuation pendente com um resultado.
-    func resume(with result: Result<AuthSession, Error>) {
-        pendingContinuation?.resume(with: result)
-        pendingContinuation = nil
-    }
-}
-
 // MARK: - Mock: GoogleAuthServicing
 
 /// Mock de GoogleAuthServicing para uso exclusivo em testes.
+/// Modo síncrono: configure `stubbedResult` para retorno imediato.
+/// Modo bloqueante: `stubbedResult = nil` suspende até `resume()` ser chamado
+/// — permite observar `isLoading == true` de forma determinística sem Task.sleep.
 @MainActor
 final class MockGoogleAuthService: GoogleAuthServicing {
 
     private(set) var signInCallCount = 0
     private(set) var signOutCallCount = 0
 
-    var stubbedResult: Result<AuthSession, Error>? = .success(AuthSession.stub)
+    var stubbedResult: Result<AuthSession, Error>?
     private var pendingContinuation: CheckedContinuation<AuthSession, Error>?
 
     func signIn() async throws -> AuthSession {
@@ -74,6 +39,7 @@ final class MockGoogleAuthService: GoogleAuthServicing {
         signOutCallCount += 1
     }
 
+    /// Libera a continuation pendente com um resultado.
     func resume(with result: Result<AuthSession, Error>) {
         pendingContinuation?.resume(with: result)
         pendingContinuation = nil
@@ -82,8 +48,11 @@ final class MockGoogleAuthService: GoogleAuthServicing {
 
 // MARK: - Helpers
 
-private extension AuthSession {
-    static let stub: AuthSession = (
+/// Retorna uma AuthSession stub válida.
+/// Função livre (não extension em tupla) — tuple extensions são experimentais em Swift 6.
+@MainActor
+private func stubSession() -> AuthSession {
+    (
         user: AuthenticatedUser(
             id: UUID(),
             name: "Gabriel Ferrari",
@@ -95,6 +64,8 @@ private extension AuthSession {
     )
 }
 
+/// SessionStore em memória usando StubSessionPersistence existente em SessionStoreTests.
+@MainActor
 private func makeStore() -> SessionStore {
     SessionStore(persistence: StubSessionPersistence())
 }
@@ -110,22 +81,25 @@ struct AuthViewModelTests {
     /// performSignIn: isLoading vai para true durante a execução e false ao terminar.
     @Test func authViewModel_performSignIn_isLoadingTogglesAroundExecution() async {
         let google = MockGoogleAuthService()
-        google.stubbedResult = nil // modo bloqueante — a task fica suspensa
+        google.stubbedResult = nil // modo bloqueante — task fica suspensa no mock
         let viewModel = AuthViewModel(session: makeStore(), googleAuthService: google)
 
-        // Antes de qualquer chamada: deve ser false
         #expect(viewModel.isLoading == false)
 
-        // Dispara sem await — a task fica suspensa no mock
         viewModel.signInWithGoogle()
 
-        // Neste ponto a Task foi criada mas ainda não terminou → deve ser true
+        // Cede ao executor para a Task interna rodar e setar isLoading = true
+        await Task.yield()
+
         #expect(viewModel.isLoading == true)
 
-        // Libera o mock com sucesso e aguarda a task concluir
-        google.resume(with: .success(AuthSession.stub))
-        await Task.yield() // cede ao executor para a task da VM terminar
-        await Task.yield()
+        google.resume(with: .success(stubSession()))
+
+        // Drena até isLoading virar false (robusto contra variações do scheduler)
+        for _ in 0..<10 {
+            await Task.yield()
+            if !viewModel.isLoading { break }
+        }
 
         #expect(viewModel.isLoading == false)
     }
@@ -135,11 +109,10 @@ struct AuthViewModelTests {
     /// performSignIn com sucesso: nenhum errorMessage.
     @Test func authViewModel_performSignIn_success_noErrorMessage() async {
         let google = MockGoogleAuthService()
-        google.stubbedResult = .success(AuthSession.stub)
+        google.stubbedResult = .success(stubSession())
         let viewModel = AuthViewModel(session: makeStore(), googleAuthService: google)
 
         viewModel.signInWithGoogle()
-        // Aguarda a task completar (mock síncrono via stubbedResult)
         await Task.yield()
         await Task.yield()
 
@@ -187,18 +160,21 @@ struct AuthViewModelTests {
         google.stubbedResult = nil // bloqueia para garantir que a task ainda está ativa
         let viewModel = AuthViewModel(session: makeStore(), googleAuthService: google)
 
-        // Primeiro tap — task criada, mock suspenso
         viewModel.signInWithGoogle()
+
+        // Cede ao executor para a Task interna rodar e chamar signIn() no mock
+        await Task.yield()
+
         #expect(viewModel.isLoading == true)
-
-        // Segundo tap enquanto loading — deve ser ignorado pelo guard
-        viewModel.signInWithGoogle()
-
-        // Apenas uma chamada deve ter chegado ao service
         #expect(google.signInCallCount == 1)
 
-        // Limpa: libera a continuation para não vazar
-        google.resume(with: .success(AuthSession.stub))
+        // Segundo tap — deve ser ignorado pelo guard signInTask == nil
+        viewModel.signInWithGoogle()
+
+        #expect(google.signInCallCount == 1)
+
+        // Limpa: libera a continuation para não vazar Tasks pendentes
+        google.resume(with: .success(stubSession()))
         await Task.yield()
         await Task.yield()
     }
