@@ -10,18 +10,6 @@ import Testing
 
 @testable import JordaniaTeam
 
-// MARK: - JWT helpers
-
-/// Gera um JWT mínimo com `exp` calculado a partir de agora + offset em segundos.
-/// Não é assinado — apenas estrutura válida para os testes de parsing.
-private func makeJWT(expiresInSeconds offset: TimeInterval) -> String {
-    let exp = Int(Date().timeIntervalSince1970) + Int(offset)
-    let payload = #"{"exp":\#(exp)}"#
-    let encoded = Data(payload.utf8).base64EncodedString()
-        .replacingOccurrences(of: "=", with: "")
-    return "header.\(encoded).signature"
-}
-
 // MARK: - StubBackendAuthService
 
 final class StubBackendAuthService: BackendAuthServiceProtocol, @unchecked Sendable {
