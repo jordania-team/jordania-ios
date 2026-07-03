@@ -59,10 +59,10 @@ Baseline:
 
 ## What Not to Test
 
-- `KeychainService` — Keychain APIs are not available in unit test sandboxes without entitlements. Test through `SessionPersistence` with a fake `KeychainService` or use integration tests on a real device.
-- `AppleAuthService` and `GoogleAuthService` — both depend on OS-level authentication dialogs. Test the logic that processes their output (the `AuthViewModel.performSignIn` path) by injecting a mock service.
-- Views — layout is verified through Previews, not automated tests. Do not write `ViewInspector`-style tests.
-- `AppContainer` — it is a composition root, not logic. There is nothing to assert.
+- **`KeychainService`** — Keychain APIs are not available in unit test sandboxes without entitlements. Test through `SessionPersistence` with a fake `KeychainService`.
+- **`AppleAuthService` and `GoogleAuthService`** — both depend on OS-level authentication dialogs and system frameworks (`AuthenticationServices`, `GoogleSignIn`) that are not available in the test target sandbox. The strategy is to test the logic that consumes their output: `AuthViewModel.performSignIn` is covered by injecting `MockGoogleAuthService` via the `GoogleAuthServicing` protocol. See [Mocking Strategy](#mocking-strategy).
+- **Views** — layout is verified through Previews, not automated tests. Do not write `ViewInspector`-style tests.
+- **`AppContainer`** — it is a composition root, not logic. There is nothing to assert.
 
 ---
 
@@ -71,10 +71,10 @@ Baseline:
 Because `TokenProvider` and `APIClient` are `actor` types, and `SessionStore` and `AuthViewModel` are `@MainActor`, tests require correct actor context.
 
 ```swift
-// Testing a @MainActor type
-@Test @MainActor func authViewModel_signIn_setsLoading() async {
-    ...
-}
+// Testing a @MainActor type: annotate the entire @Suite
+@Suite("AuthViewModel")
+@MainActor
+struct AuthViewModelTests { ... }
 
 // Testing an actor method
 @Test func tokenProvider_coalesces_concurrentRefreshes() async throws {
@@ -82,20 +82,66 @@ Because `TokenProvider` and `APIClient` are `actor` types, and `SessionStore` an
     async let first = provider.forceRefresh()
     async let second = provider.forceRefresh()
     let results = try await [first, second]
-    // Only one network call was made
     #expect(mockAuthService.refreshCallCount == 1)
 }
 ```
 
-Never use `Task.sleep` to sequence concurrent tests. Inject a controllable clock or use continuation-based mocks to control timing deterministically.
+### Deterministic timing with continuation-based mocks
+
+Never use `Task.sleep` to sequence concurrent tests. Use continuation-based mocks to suspend a dependency until the test is ready to observe the intermediate state, then release it.
+
+```swift
+// Mock that blocks until resume() is called
+@MainActor
+final class MockGoogleAuthService: GoogleAuthServicing {
+    var stubbedResult: Result<AuthSession, Error>?
+    private var pendingContinuation: CheckedContinuation<AuthSession, Error>?
+
+    func signIn() async throws -> AuthSession {
+        if let stubbedResult { return try stubbedResult.get() }
+        return try await withCheckedThrowingContinuation { continuation in
+            pendingContinuation = continuation
+        }
+    }
+
+    func resume(with result: Result<AuthSession, Error>) {
+        pendingContinuation?.resume(with: result)
+        pendingContinuation = nil
+    }
+}
+
+// Usage: observe isLoading == true while the task is suspended
+@Test func authViewModel_performSignIn_isLoadingTogglesAroundExecution() async {
+    let google = MockGoogleAuthService()
+    google.stubbedResult = nil               // blocking mode
+    let viewModel = AuthViewModel(session: makeStore(), googleAuthService: google)
+
+    viewModel.signInWithGoogle()
+    await Task.yield()                       // let the internal Task start
+
+    #expect(viewModel.isLoading == true)
+
+    google.resume(with: .success(stubSession()))
+    for _ in 0..<10 {                        // drain until defer runs
+        await Task.yield()
+        if !viewModel.isLoading { break }
+    }
+
+    #expect(viewModel.isLoading == false)
+}
+```
+
+**Why `Task.yield()` before the first assert:** `signInWithGoogle()` creates a `Task` but does not execute it. On `@MainActor`, the task is enqueued and only runs when the current caller yields. Without `await Task.yield()`, the task has not started yet — `isLoading` is still `false` and `signInCallCount` is still `0`.
 
 ---
 
 ## Mocking Strategy
 
-Jordania uses **protocol-free mocking via initialiser injection**. Dependencies are injected as concrete types through `init`, so test doubles are created by passing fake implementations directly.
+Jordania uses **initialiser injection** as the primary DI mechanism. Protocols are introduced only when a genuine abstraction boundary exists. There are two distinct cases:
 
-Because `AppContainer.init` accepts a `persistence: SessionPersistence` parameter and `SessionPersistence.init` accepts a `keychain: KeychainService`, the entire persistence stack can be replaced in tests without protocols:
+### Case 1 — Fake concrete types (preferred)
+
+For types whose dependencies are all in-module, replace collaborators by constructing concrete fakes through `init`:
 
 ```swift
 // Replace KeychainService with an in-memory double
@@ -104,16 +150,29 @@ let persistence = SessionPersistence(keychain: fakeKeychain)
 let store = SessionStore(persistence: persistence)
 ```
 
-For service-level doubles (e.g., `BackendAuthService`), use a local `struct` inside the test file that matches the same interface:
+### Case 2 — Protocols required by framework boundary
+
+When a concrete type depends on a system framework that is unavailable in the test target (e.g., `AuthenticationServices`, `GoogleSignIn`), a protocol is introduced in **production code** so the test target can inject a mock without importing the unavailable framework.
+
+`AuthViewModel` is the canonical example:
 
 ```swift
-struct AlwaysSucceedingAuthService: BackendAuthServiceProtocol {
-    func login(...) async throws -> AuthSession { ... }
-    func refresh(...) async throws -> AuthSession { ... }
+// Defined in production (AuthViewModel.swift)
+@MainActor
+protocol GoogleAuthServicing: AnyObject {
+    func signIn() async throws -> AuthSession
+    func signOut()
 }
+
+// Concrete conformance in production
+extension GoogleAuthService: GoogleAuthServicing {}
+
+// Mock lives only in the test target
+@MainActor
+final class MockGoogleAuthService: GoogleAuthServicing { ... }
 ```
 
-If a protocol is needed to enable mocking, it is acceptable to introduce one locally in the test target — it does not need to live in production code.
+**The rule:** protocols live in production only when the test target cannot import the framework the concrete type depends on. This is not a general abstraction strategy — it is a targeted seam for untestable framework boundaries.
 
 ---
 
@@ -123,8 +182,7 @@ If a protocol is needed to enable mocking, it is acceptable to introduce one loc
 JordaniaTeamTests/
 ├── Core/
 │   ├── Authentication/
-│   │   ├── TokenProviderTests.swift
-│   │   └── BackendAuthServiceTests.swift
+│   │   └── TokenProviderTests.swift
 │   ├── Networking/
 │   │   ├── APIClientTests.swift
 │   │   └── NetworkErrorTests.swift
