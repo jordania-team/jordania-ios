@@ -72,8 +72,8 @@ Cross-cutting infrastructure shared by multiple features.
 
 | Subfolder | Contents | Key Types |
 |---|---|---|
-| `Core/Session/` | Authentication state and its persistence contract | `SessionStore`, `SessionState`, `AuthenticatedUser`, `SessionPersistence` |
-| `Core/Authentication/` | Provider services and token lifecycle | `AppleAuthService`, `GoogleAuthService`, `BackendAuthService`, `TokenProvider`, `AuthError` |
+| `Core/Session/` | Authentication state and its persistence contract | `SessionStore`, `SessionState`, `AuthenticatedUser`, `SessionPersistence`, `SessionPersistenceProtocol` |
+| `Core/Authentication/` | Provider services and token lifecycle | `AppleAuthService`, `GoogleAuthService`, `BackendAuthService`, `BackendAuthServiceProtocol`, `TokenProvider`, `AuthError` |
 | `Core/Networking/` | HTTP execution and error taxonomy | `APIClient`, `NetworkError` |
 | `Core/Security/` | Keychain abstraction and JWT utilities | `KeychainService`, `JWT` |
 | `Core/User/` | User data fetching | `UserService` |
@@ -113,8 +113,8 @@ JordaniaTeamApp
         │     └── SessionPersistence
         │           └── KeychainService
         ├── TokenProvider (actor)
-        │     ├── SessionPersistence
-        │     ├── BackendAuthService
+        │     ├── SessionPersistence        [via SessionPersistenceProtocol]
+        │     ├── BackendAuthService        [via BackendAuthServiceProtocol]
         │     └── SessionStore (weak)
         ├── APIClient (actor)
         │     ├── TokenProvider
@@ -128,7 +128,7 @@ JordaniaTeamApp
               └── APIClient
 ```
 
-Arrows represent "depends on / holds a reference to". `SessionStore` is held weakly by `TokenProvider` and `APIClient` to avoid retain cycles.
+Arrows represent "depends on / holds a reference to". `SessionStore` is held weakly by `TokenProvider` and `APIClient` to avoid retain cycles. `TokenProvider` depends on `SessionPersistenceProtocol` and `BackendAuthServiceProtocol` — concrete types are injected at the `AppContainer` composition root.
 
 ---
 
@@ -195,8 +195,10 @@ JordaniaTeamApp.task
 | `SessionState` | `Core/Session/SessionState.swift` | Core | Auth state machine cases |
 | `AuthenticatedUser` | `Core/Session/AuthenticatedUser.swift` | Core | Session identity model |
 | `SessionPersistence` | `Core/Session/SessionPersistence.swift` | Core | Keychain read/write facade |
+| `SessionPersistenceProtocol` | `Core/Session/SessionPersistenceProtocol.swift` | Core | Testability contract for session persistence |
 | `TokenProvider` | `Core/Authentication/TokenProvider.swift` | Core | Token lifecycle + coalescing |
 | `BackendAuthService` | `Core/Authentication/BackendAuthService.swift` | Core | OAuth → JWT exchange |
+| `BackendAuthServiceProtocol` | `Core/Authentication/BackendAuthServiceProtocol.swift` | Core | Testability contract for backend auth |
 | `AppleAuthService` | `Core/Authentication/AppleAuthService.swift` | Core | Sign in with Apple |
 | `GoogleAuthService` | `Core/Authentication/GoogleAuthService.swift` | Core | Google Sign-In |
 | `APIClient` | `Core/Networking/APIClient.swift` | Core | Authenticated HTTP executor |
