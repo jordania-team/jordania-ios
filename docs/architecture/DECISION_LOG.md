@@ -166,3 +166,36 @@ The app needs to route between unauthenticated (`AuthView`), loading, error, and
 - The routing logic is in one place and is exhaustive — the compiler enforces that all cases are handled.
 - New top-level states (e.g., `.onboarding`) require adding a case to `SessionState` and a branch in `RootView` — changes are localised.
 - No view can route to `MainTabView` without going through `SessionStore.signIn()`.
+
+---
+
+### ADR-009 — AppConfiguration as a Caseless Enum for Environment Values
+**Date:** 2026-07-04  
+**Status:** Accepted
+
+**Context:**
+The application requires environment-specific configuration values — most critically the API base URL, which is `http://localhost:8080` in `DEBUG` builds and `https://api.redepets.xyz` in production. Several designs were considered: a singleton class, a `struct` with `static let` properties, a dependency injected into `AppContainer`, or a caseless `enum`.
+
+A singleton class or struct introduces the risk of instantiation: nothing prevents `AppConfiguration()` from being created multiple times or stored as a dependency. Injecting configuration as a dependency into `AppContainer` adds indirection without benefit, since configuration values are compile-time constants resolved via `#if DEBUG`, not runtime values.
+
+**Decision:**
+`AppConfiguration` is a caseless `enum` with `static let` properties. A caseless enum cannot be instantiated — Swift's type system enforces that it is a namespace, not an object. The `apiBaseURL` property is resolved at compile time using `#if DEBUG`.
+
+```swift
+enum AppConfiguration {
+    static let apiBaseURL: URL = {
+        #if DEBUG
+        URL(string: "http://localhost:8080")!
+        #else
+        URL(string: "https://api.redepets.xyz")!
+        #endif
+    }()
+}
+```
+
+**Consequences:**
+- `AppConfiguration` is a pure compile-time namespace. It cannot be instantiated, subclassed, or injected — eliminating an entire class of misuse.
+- Adding a new environment value requires one `static let` property. No constructor changes, no DI wiring.
+- The `#if DEBUG` flag is the single authority for environment switching. No `.xcconfig` gymnastics, no environment variables, no scheme arguments for this purpose.
+- Values resolved via `#if DEBUG` are compiler-verified. A missing `#else` branch is a compile error, not a runtime crash.
+- This pattern is appropriate only for compile-time constants. Runtime-variable configuration (e.g., feature flags fetched from a server) must not use this type.
