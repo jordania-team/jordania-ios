@@ -2,7 +2,7 @@
 
 **Purpose:** Documenta como o Jordania gerencia dependências — como o grafo é construído, como tipos recebem suas dependências e as regras que mantêm tudo explícito e testável.
 
-**Scope:** Composition root, padrões de injeção e regras. O motivo dessas escolhas está em [ADR-003](../architecture/DECISION_LOG.md). As camadas de arquitetura estão descritas em [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+**Scope:** Composition root, padrões de injeção e regras. O motivo dessas escolhas está em [ADR-003](../architecture/DECISION_LOG.md) e [ADR-010](../architecture/DECISION_LOG.md). As camadas de arquitetura estão descritas em [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
 
 ---
 
@@ -13,7 +13,7 @@
 3. [Grafo de Dependências](#grafo-de-dependências)
 4. [Padrões de Injeção](#padrões-de-injeção)
 5. [Regras de Dependência](#regras-de-dependência)
-6. [Testes sem Protocolos](#testes-sem-protocolos)
+6. [Testes e Testabilidade](#testes-e-testabilidade)
 
 ---
 
@@ -115,6 +115,7 @@ Observações importantes sobre o grafo:
 
 - `TokenProvider` e `APIClient` são `actor` — serializam acesso a estado compartilhado entre Tasks concorrentes.
 - `APIClient` e `TokenProvider` mantêm `weak var sessionStore: SessionStore?` para evitar retain cycle no grafo.
+- `TokenProvider` recebe `SessionPersistence` via `SessionPersistenceProtocol` e `BackendAuthService` via `BackendAuthServiceProtocol` — o `AppContainer` passa os tipos concretos; o grafo em produção é idêntico ao descrito acima.
 - `SessionStore` não conhece `APIClient` — o flow de invalidação de sessão vai de `APIClient → TokenProvider → SessionStore.signOut()`, nunca o contrário.
 - `AuthViewModel` recebe apenas `SessionStore` — não precisa de `APIClient` porque não faz chamadas de rede diretamente.
 
@@ -208,20 +209,26 @@ case .authenticated:
 
 ---
 
-## Testes sem Protocolos
+## Testes e Testabilidade
 
-O projeto não adiciona protocolos para cada service (seriam abstrações prematuras para o tamanho atual). Testes substituem dependências via:
+A estratégia de testabilidade combina injeção de concretos com seams de protocolo pontuais definidos pelo ADR-010.
 
-1. **Overrides do `init` do `AppContainer`** — passe um `URLSession` customizado (ex: um backed por `URLProtocol`) para interceptar chamadas de rede:
+### Overrides do `init` do `AppContainer`
+
+Passe um `URLSession` customizado (ex: um backed por `URLProtocol`) para interceptar chamadas de rede:
 
 ```swift
 let mockSession = URLSession(configuration: mockConfiguration)
 let container = AppContainer(urlSession: mockSession)
 ```
 
-2. **Parâmetros opcionais do `init` do ViewModel** — `AuthViewModel` aceita `AppleAuthService?` e `GoogleAuthService?` opcionais, permitindo subclasses leves ou inicializações alternativas em testes.
+### Parâmetros opcionais do `init` do ViewModel
 
-3. **Observação de estado `@Observable`** — teste que `SessionStore.state` transita corretamente chamando `signIn` / `signOut` diretamente, sem precisar mockar o Keychain:
+`AuthViewModel` aceita `AppleAuthService?` e `GoogleAuthService?` opcionais, permitindo subclasses leves ou inicializações alternativas em testes.
+
+### Observação de estado `@Observable`
+
+Teste que `SessionStore.state` transita corretamente chamando `signIn` / `signOut` diretamente, sem precisar mockar o Keychain:
 
 ```swift
 let store = SessionStore(persistence: inMemoryPersistence)
@@ -229,4 +236,11 @@ store.signIn(user: mockUser, accessToken: "token", refreshToken: "refresh")
 #expect(store.state == .authenticated)
 ```
 
-4. **Override de `SessionPersistence`** — passe uma `SessionPersistence` configurada com um `KeychainService` que armazena em memória durante testes, sem tocar no Keychain do sistema.
+### Protocolos de testabilidade (ADR-010)
+
+`TokenProvider` recebe suas dependências de infraestrutura via protocolos `Sendable` para que o runner do Swift Testing possa substituí-las por doubles em memória, sem Keychain entitlements nem rede:
+
+- **`SessionPersistenceProtocol`** — implementado por `SessionPersistence`; aceita um double in-memory em testes.
+- **`BackendAuthServiceProtocol`** — implementado por `BackendAuthService`; aceita um double que retorna tokens fixos ou erros controláveis.
+
+Esses são os **únicos** dois protocolos introduzidos sob essa regra. O critério para adicionar um novo protocolo é estritamente: *o tipo concreto requer infraestrutura externa (entitlements, rede, filesystem) indisponível no runner de testes*. Qualquer outra motivação é proibida por ADR-003.

@@ -31,6 +31,7 @@ JordaniaTeam/
 │   │   ├── AppleAuthService.swift
 │   │   ├── AuthError.swift
 │   │   ├── BackendAuthService.swift
+│   │   ├── BackendAuthServiceProtocol.swift  # Testability seam (ADR-010)
 │   │   ├── GoogleAuthService.swift
 │   │   └── TokenProvider.swift
 │   ├── Networking/
@@ -42,6 +43,7 @@ JordaniaTeam/
 │   ├── Session/
 │   │   ├── AuthenticatedUser.swift
 │   │   ├── SessionPersistence.swift
+│   │   ├── SessionPersistenceProtocol.swift  # Testability seam (ADR-010)
 │   │   ├── SessionState.swift
 │   │   └── SessionStore.swift
 │   └── User/
@@ -69,7 +71,7 @@ JordaniaTeam/
 │
 ├── Shared/
 │   └── DesignSystem/
-│       ├── BrandColor.swift
+│       ├── BrandColors.swift
 │       └── BrandSpacing.swift
 │
 ├── Assets.xcassets/
@@ -117,6 +119,7 @@ UI-only reusable components and design tokens. Contains no business logic, no se
 | SwiftUI View | `View` | `AuthView`, `FeedView` |
 | ViewModel | `ViewModel` | `AuthViewModel` |
 | Service (network/auth) | `Service` | `BackendAuthService`, `UserService` |
+| Testability protocol (ADR-010) | `Protocol` | `BackendAuthServiceProtocol`, `SessionPersistenceProtocol` |
 | Store (observable state) | `Store` | `SessionStore` |
 | Persistence (Keychain/disk facade) | `Persistence` | `SessionPersistence` |
 | Error enum | `Error` | `NetworkError`, `AuthError` |
