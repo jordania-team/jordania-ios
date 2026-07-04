@@ -55,6 +55,18 @@ Baseline:
 
 `AuthError` and `NetworkError` are separate error types with distinct semantics — both should be tested at the mapping boundaries where one converts to the other (e.g., `BackendAuthService.refresh` mapping `NetworkError.unauthorized` → `AuthError.sessionExpired`).
 
+### Auth edge cases now covered
+
+The authentication test suite must cover both business outcome and task-lifecycle behavior:
+
+- Success path: session is created and no UI error is shown.
+- User cancellation: `AuthError.cancelled` and `NetworkError.cancelled` remain silent.
+- Typed network failure: `errorMessage` is populated from `NetworkError.errorDescription`.
+- Duplicate submission: a second tap while the first sign-in task is active is ignored.
+- Mid-flight loading: `isLoading` must be `true` while the async provider operation is still suspended, then `false` after teardown.
+
+These cases exist because auth is both a domain boundary and a concurrency boundary. Regressions here are usually not syntax bugs — they are state-machine bugs.
+
 ---
 
 ## What Not to Test
@@ -133,46 +145,129 @@ final class MockGoogleAuthService: GoogleAuthServicing {
 
 **Why `Task.yield()` before the first assert:** `signInWithGoogle()` creates a `Task` but does not execute it. On `@MainActor`, the task is enqueued and only runs when the current caller yields. Without `await Task.yield()`, the task has not started yet — `isLoading` is still `false` and `signInCallCount` is still `0`.
 
+### Testing @MainActor ViewModels with internal Task creation
+
+A synchronous action method like `signInWithGoogle()` may create a `Task` and return immediately. In that case, assertions made immediately after the call may run before the task body has executed.
+
+Canonical pattern:
+
+1. Call the action.
+2. `await Task.yield()` to let the scheduled work begin.
+3. Assert intermediate state.
+4. Resume the controlled dependency.
+5. Yield again until teardown finishes.
+
+This pattern is used in `AuthViewModelTests` to prove:
+- loading starts before the provider flow completes,
+- loading ends on every exit path,
+- duplicate taps are ignored while `signInTask != nil`.
+
 ---
 
 ## Mocking Strategy
 
-Jordania uses **initialiser injection** as the primary DI mechanism. Protocols are introduced only when a genuine abstraction boundary exists. There are two distinct cases:
+Jordania uses **initialiser injection first**. The default rule is still to inject concrete types directly and avoid protocol proliferation when there is no real abstraction boundary.
 
-### Case 1 — Fake concrete types (preferred)
+That said, Swift 6 strict concurrency and OS-owned authentication SDKs introduced one deliberate exception: **tiny capability protocols are acceptable when they are required to make a UI-adjacent async workflow testable without the real SDK**.
 
-For types whose dependencies are all in-module, replace collaborators by constructing concrete fakes through `init`:
+### Default approach
+
+Prefer replacing collaborators through concrete test-controlled types passed into `init`:
 
 ```swift
-// Replace KeychainService with an in-memory double
 let fakeKeychain = InMemoryKeychainService()
 let persistence = SessionPersistence(keychain: fakeKeychain)
 let store = SessionStore(persistence: persistence)
 ```
 
-### Case 2 — Protocols required by framework boundary
+Use this approach when:
+- The dependency is project-owned.
+- The dependency can be instantiated safely in tests.
+- The dependency does not require OS UI or third-party SDK presentation.
 
-When a concrete type depends on a system framework that is unavailable in the test target (e.g., `AuthenticationServices`, `GoogleSignIn`), a protocol is introduced in **production code** so the test target can inject a mock without importing the unavailable framework.
+### Allowed exception: minimal service protocols
 
-`AuthViewModel` is the canonical example:
+For `AuthViewModel`, the production code exposes two narrow protocols:
+
+- `AppleAuthServicing`
+- `GoogleAuthServicing`
+
+These protocols do **not** exist to create a broad architectural abstraction. They exist for one reason only: the real Apple and Google auth services depend on OS- and SDK-driven flows that unit tests cannot drive directly.
+
+The rule is:
+
+- Introduce a protocol only at the seam that is impossible or expensive to test with the concrete type.
+- Keep the protocol surface minimal — only the methods the consumer actually needs.
+- Do not create "-able" protocols pre-emptively for every service in the codebase.
+
+This keeps the architecture concrete-by-default while still allowing deterministic tests for authentication state transitions.
+
+### Continuation-based mocks for async state validation
+
+When a `@MainActor` ViewModel creates an internal `Task`, synchronous assertions immediately after calling the method are often observing state **before the task has started running**.
+
+For these cases, use a continuation-based mock:
 
 ```swift
-// Defined in production (AuthViewModel.swift)
 @MainActor
-protocol GoogleAuthServicing: AnyObject {
-    func signIn() async throws -> AuthSession
-    func signOut()
+final class MockGoogleAuthService: GoogleAuthServicing {
+    var stubbedResult: Result<AuthSession, Error>?
+    private var continuation: CheckedContinuation<AuthSession, Error>?
+
+    func signIn() async throws -> AuthSession {
+        if let stubbedResult {
+            return try stubbedResult.get()
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func signOut() { }
+
+    func resume(with result: Result<AuthSession, Error>) {
+        continuation?.resume(with: result)
+        continuation = nil
+    }
 }
-
-// Concrete conformance in production
-extension GoogleAuthService: GoogleAuthServicing {}
-
-// Mock lives only in the test target
-@MainActor
-final class MockGoogleAuthService: GoogleAuthServicing { ... }
 ```
 
-**The rule:** protocols live in production only when the test target cannot import the framework the concrete type depends on. This is not a general abstraction strategy — it is a targeted seam for untestable framework boundaries.
+This pattern is used when the test needs to prove intermediate state such as:
+
+- `isLoading == true` while sign-in is still in flight.
+- Duplicate taps are ignored while the first task is still active.
+
+The test flow is:
+
+1. Inject a mock whose async method suspends via continuation.
+2. Trigger the ViewModel action.
+3. `await Task.yield()` so the internal task starts on the `@MainActor`.
+4. Assert intermediate state.
+5. Resume the continuation with success or failure.
+6. Yield again until teardown completes, then assert final state.
+
+### Why not `Task.sleep`?
+
+`Task.sleep` is not used to sequence concurrent behavior because it is time-based and makes tests flaky. The project prefers:
+- actor-aware control flow,
+- explicit continuations,
+- and `Task.yield()` only to give the executor a chance to run already-scheduled work.
+
+### Why not test AppleAuthService or GoogleAuthService directly?
+
+These types depend on OS-level or SDK-owned authentication surfaces:
+- `AuthenticationServices`
+- `GoogleSignIn`
+- foreground `UIViewController` presentation
+
+Those are integration boundaries, not stable unit-test seams. The unit tests therefore validate the consumer (`AuthViewModel`) and its state machine behavior instead of trying to automate provider SDK dialogs.
+
+### Practical summary
+
+- **Concrete injection by default**
+- **Minimal protocol seam only when the concrete dependency is not unit-testable**
+- **Continuation-based mocks for deterministic async state assertions**
+- **No expectation-style blocking, no sleep-based timing control**
 
 ---
 
@@ -195,7 +290,9 @@ JordaniaTeamTests/
         └── AuthViewModelTests.swift
 ```
 
-Mirror the source structure. One test file per source file. Group related assertions inside a single `@Test` using `#expect` — avoid one assertion per test function.
+Mirror the source structure. One test file per source file under test, except where a production type is intentionally validated through a higher-value boundary.
+
+`AppleAuthService` and `GoogleAuthService` are examples of this exception: their provider-SDK specifics are not unit-tested directly; the important behavior is verified through `AuthViewModelTests`.
 
 ---
 
