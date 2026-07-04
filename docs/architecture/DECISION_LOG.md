@@ -199,3 +199,35 @@ enum AppConfiguration {
 - The `#if DEBUG` flag is the single authority for environment switching. No `.xcconfig` gymnastics, no environment variables, no scheme arguments for this purpose.
 - Values resolved via `#if DEBUG` are compiler-verified. A missing `#else` branch is a compile error, not a runtime crash.
 - This pattern is appropriate only for compile-time constants. Runtime-variable configuration (e.g., feature flags fetched from a server) must not use this type.
+
+---
+
+### ADR-010 — Selective Protocols for Testability at Actor Boundaries
+**Date:** 2026-07-04  
+**Status:** Accepted
+
+**Context:**
+ADR-003 establishes that protocols are introduced only when a genuine abstraction boundary exists. Two such boundaries were identified during Phase 1:
+
+1. **`SessionPersistenceProtocol`** — `TokenProvider` (an `actor`) depends on `SessionPersistence` (synchronous Keychain access). In test targets, Keychain access requires the `com.apple.security.keychain-access-groups` entitlement, which is not available in the Swift Testing runner. Without a protocol, `TokenProvider` cannot be tested without real Keychain entitlements.
+
+2. **`BackendAuthServiceProtocol`** — `TokenProvider` calls `BackendAuthService.refresh()` to obtain new tokens. `BackendAuthService` performs live network requests. Without a protocol, testing `TokenProvider`'s refresh-coalescing logic requires a live backend.
+
+In both cases, the protocol does not introduce a design abstraction — it introduces a **seam** that allows the dependency to be replaced with a test double that has no external requirements.
+
+**Decision:**
+Introduce minimal `Sendable` protocols for dependencies of actors that would otherwise require external infrastructure (Keychain entitlements, live network) in tests:
+
+- `SessionPersistenceProtocol` — `nonisolated` + `Sendable`. Conformed to by `SessionPersistence` via a retroactive extension.
+- `BackendAuthServiceProtocol` — `Sendable`. Conformed to by `BackendAuthService` via a retroactive extension.
+
+`TokenProvider` is injected with `any SessionPersistenceProtocol` and `any BackendAuthServiceProtocol`. `AppContainer` passes the concrete types. Tests pass lightweight in-memory doubles.
+
+No other types receive protocol wrappers under this ADR. The trigger for introducing a new protocol under this rule is: *the concrete type requires external infrastructure (entitlements, network, filesystem) that is unavailable in the test runner*.
+
+**Consequences:**
+- `TokenProvider`'s refresh-coalescing logic can be tested in full isolation: no Keychain, no network.
+- The protocol surface is minimal — only the methods actually called by `TokenProvider` are in the contract.
+- `AppContainer` still wires concrete types; the protocol is invisible at the composition root except in the type annotation.
+- Adding a protocol for any other reason ("might need a mock someday", "cleaner design") is explicitly forbidden by ADR-003. The infrastructure-requirement trigger is the only valid justification.
+- `nonisolated` on `SessionPersistenceProtocol` allows the actor (`TokenProvider`) to call its methods without crossing isolation boundaries, since the Keychain operations are synchronous and do not mutate actor state.
