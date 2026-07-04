@@ -77,7 +77,7 @@ Phase 1 established the engineering skeleton of the application. The goal was no
 - `Features/Search` — scaffolded, content pending.
 
 **Engineering documentation**
-- `docs/` directory with the full documentation structure (18 Markdown files).
+- `docs/` directory with the full documentation structure (19 Markdown files).
 - Core project documentation (this phase).
 
 ---
