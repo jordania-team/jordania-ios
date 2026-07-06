@@ -69,10 +69,12 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
             return
         }
 
-        // Passo 2: extrai o certificado folha (índice 0 = mais próximo do servidor).
+        // Passo 2: extrai a cadeia ordenada e pega o certificado folha (índice 0).
+        // SecTrustCopyCertificateChain substitui SecTrustGetCertificateAtIndex (deprecated iOS 15).
         guard
-            let certificate = SecTrustGetCertificateAtIndex(serverTrust, 0),
-            let publicKey = SecCertificateCopyKey(certificate),
+            let chain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+            let leafCertificate = chain.first,
+            let publicKey = SecCertificateCopyKey(leafCertificate),
             let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data?
         else {
             Self.logger.error("Não foi possível extrair a chave pública do certificado folha.")
