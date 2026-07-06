@@ -73,9 +73,9 @@ enum AuthFixtures {
         """
     }
 
-    private static let unauthorizedJSON = """{"error": "Unauthorized"}"""
-    private static let serverErrorJSON  = """{"error": "Internal Server Error"}"""
-    private static let invalidPayloadJSON = """{"unexpected_field": true}"""
+    private static let unauthorizedJSON   = "{\"error\": \"Unauthorized\"}"
+    private static let serverErrorJSON    = "{\"error\": \"Internal Server Error\"}"
+    private static let invalidPayloadJSON = "{\"unexpected_field\": true}"
 
     // MARK: - Builder
 
