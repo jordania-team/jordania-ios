@@ -45,7 +45,13 @@ struct BackendAuthService {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "BackendAuth")
 
-    nonisolated init() {}
+    /// URLSession injetável — defaults para .shared em produção.
+    /// Em testes, injete TestURLSessionFactory.make() para interceptar via MockURLProtocol.
+    private let session: URLSession
+
+    nonisolated init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     // MARK: - Login
 
@@ -107,7 +113,7 @@ struct BackendAuthService {
         request.timeoutInterval = 10
 
         do {
-            _ = try await URLSession.shared.data(for: request)
+            _ = try await session.data(for: request)
         } catch {
             Self.logger.warning("Logout remoto falhou (aceito): \(error)")
         }
@@ -135,7 +141,7 @@ struct BackendAuthService {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await session.data(for: request)
         } catch let urlError as URLError {
             Self.logger.error("Erro de transporte: \(urlError)")
             throw NetworkError(from: urlError)
