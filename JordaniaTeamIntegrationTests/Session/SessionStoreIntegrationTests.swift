@@ -4,14 +4,12 @@
 //
 //  Sessão 3 — Testa SessionStore com SessionPersistence real (Keychain em memória).
 //
-//  O que esses testes provam:
-//  - signIn() com AuthSession válida → estado .authenticated + dados persistidos
-//  - Restauração de sessão: Keychain pré-populado → .authenticated sem rede
-//  - signOut() → estado .signedOut + Keychain limpo
-//
-//  Limitação atual: SessionStore.signIn() recebe um AuthSession e persiste via
-//  SessionPersistence. Esses testes verificam essa colaboração diretamente,
-//  sem passar pelo BackendAuthService (que é coberto pelos BackendAuthServiceIntegrationTests).
+//  API real do SessionStore:
+//  - signIn(user:accessToken:refreshToken:)  — síncrono, sem throws
+//  - signOut()                               — síncrono
+//  - state: SessionState                     — .loading | .authenticated | .signedOut | .error
+//  - currentUser: AuthenticatedUser?         — separado do state
+//  - Restauração de sessão acontece no init() automaticamente
 //
 
 import Testing
@@ -31,87 +29,85 @@ struct SessionStoreIntegrationTests {
         return (store, keychain)
     }
 
-    private func makeAuthSession() -> AuthSession {
-        let user = AuthenticatedUser(
+    private func makeUser() -> AuthenticatedUser {
+        AuthenticatedUser(
             id: AuthFixtures.testUserID,
             name: "Test User",
             email: "test@jordania.com",
             provider: .apple
         )
-        return (user: user, accessToken: AuthFixtures.validAccessToken, refreshToken: AuthFixtures.validRefreshToken)
     }
 
     // MARK: - Testes
 
-    /// Após signIn com AuthSession válida, o estado deve ser .authenticated.
-    @Test("signIn com AuthSession válida transiciona para .authenticated")
-    func signIn_validSession_transitionsToAuthenticated() async throws {
+    /// Após signIn, o estado deve ser .authenticated e currentUser preenchido.
+    @Test("signIn transiciona para .authenticated e preenche currentUser")
+    func signIn_transitionsToAuthenticated() {
         let (store, _) = makeStore()
-        let authSession = makeAuthSession()
+        let user = makeUser()
 
-        try await store.signIn(with: authSession)
+        store.signIn(
+            user: user,
+            accessToken: AuthFixtures.validAccessToken,
+            refreshToken: AuthFixtures.validRefreshToken
+        )
 
-        guard case .authenticated(let user) = store.sessionState else {
-            Issue.record("Estado esperado: .authenticated, recebido: \(store.sessionState)")
-            return
-        }
-        #expect(user.id == AuthFixtures.testUserID)
+        #expect(store.state == .authenticated)
+        #expect(store.currentUser?.id == AuthFixtures.testUserID)
+        #expect(store.currentUser?.name == "Test User")
     }
 
     /// Após signIn, os tokens devem estar persistidos no Keychain (em memória).
     @Test("signIn persiste accessToken e refreshToken no Keychain")
-    func signIn_persistsTokensInKeychain() async throws {
+    func signIn_persistsTokensInKeychain() {
         let (store, keychain) = makeStore()
-        let authSession = makeAuthSession()
+        let user = makeUser()
 
-        try await store.signIn(with: authSession)
+        store.signIn(
+            user: user,
+            accessToken: AuthFixtures.validAccessToken,
+            refreshToken: AuthFixtures.validRefreshToken
+        )
 
         #expect(keychain.loadToken() == AuthFixtures.validAccessToken)
         #expect(keychain.loadRefreshToken() == AuthFixtures.validRefreshToken)
     }
 
-    /// Com Keychain pré-populado (sessão válida), restoreSession() deve
-    /// resultar em .authenticated sem fazer nenhuma chamada de rede.
-    @Test("restoreSession com sessão válida no Keychain resulta em .authenticated")
-    func restoreSession_validKeychain_authenticates() async throws {
+    /// Com Keychain pré-populado (sessão válida), o init() do SessionStore
+    /// deve restaurar automaticamente o estado para .authenticated — sem rede.
+    @Test("init com Keychain válido restaura sessão para .authenticated")
+    func init_validKeychain_restoresSession() throws {
         let keychain = InMemoryKeychainService()
         let persistence = SessionPersistence(keychain: keychain)
 
-        // Pré-popula o Keychain diretamente (simula lançamento com sessão salva)
-        let user = AuthenticatedUser(
-            id: AuthFixtures.testUserID,
-            name: "Test User",
-            email: "test@jordania.com",
-            provider: .apple
-        )
+        // Pré-popula o Keychain diretamente (simula cold launch com sessão salva)
+        let user = makeUser()
         try keychain.saveSession(user)
         try keychain.saveToken(AuthFixtures.validAccessToken)
         try keychain.saveRefreshToken(AuthFixtures.validRefreshToken)
 
-        // Cria store DEPOIS de popular o Keychain — simula cold launch
+        // Cria store DEPOIS de popular o Keychain — restauração ocorre no init
         let store = SessionStore(persistence: persistence)
-        await store.restoreSession()
 
-        guard case .authenticated(let restoredUser) = store.sessionState else {
-            Issue.record("Estado esperado: .authenticated, recebido: \(store.sessionState)")
-            return
-        }
-        #expect(restoredUser.id == AuthFixtures.testUserID)
+        #expect(store.state == .authenticated)
+        #expect(store.currentUser?.id == AuthFixtures.testUserID)
     }
 
-    /// signOut() deve transicionar para .signedOut e limpar o Keychain.
+    /// signOut() deve transicionar para .signedOut, zerar currentUser e limpar o Keychain.
     @Test("signOut transiciona para .signedOut e limpa Keychain")
-    func signOut_clearsStateAndKeychain() async throws {
+    func signOut_clearsStateAndKeychain() {
         let (store, keychain) = makeStore()
-        let authSession = makeAuthSession()
+        let user = makeUser()
 
-        try await store.signIn(with: authSession)
-        await store.signOut()
+        store.signIn(
+            user: user,
+            accessToken: AuthFixtures.validAccessToken,
+            refreshToken: AuthFixtures.validRefreshToken
+        )
+        store.signOut()
 
-        guard case .signedOut = store.sessionState else {
-            Issue.record("Estado esperado: .signedOut, recebido: \(store.sessionState)")
-            return
-        }
+        #expect(store.state == .signedOut)
+        #expect(store.currentUser == nil)
         #expect(keychain.loadSession() == nil)
         #expect(keychain.loadToken() == nil)
         #expect(keychain.loadRefreshToken() == nil)
