@@ -18,7 +18,7 @@ import GoogleSignIn
 /// Os hashes são valores placeholder — substitua pelos SPKI SHA-256 reais
 /// extraídos do servidor de produção antes do release.
 /// Instruções em `CertificatePinningDelegate.swift`.
-private func makeProductionSession() -> URLSession {
+nonisolated private func makeProductionSession() -> URLSession {
     let pinningDelegate = CertificatePinningDelegate(pinnedHashes: [
         // Hash ativo — substitua pelo SPKI SHA-256 real do certificado de produção
         "PLACEHOLDER_ACTIVE_SPKI_SHA256_BASE64=",

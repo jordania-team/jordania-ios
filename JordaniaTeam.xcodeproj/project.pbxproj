@@ -29,9 +29,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		693710FD2FF7E59400F66303 /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = JordaniaTeam.app; path = "/Users/ferrari/Xcode/jordania-ios/build/Debug-iphoneos/JordaniaTeam.app"; sourceTree = "<absolute>"; };
 		693712482FFBDD1D00F66303 /* JordaniaTeamIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JordaniaTeamIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		69A7851D2FF53ED0001905DC /* JordaniaTeamUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = JordaniaTeamUnitTests.xctest; path = "/Users/ferrari/Xcode/jordania-ios/build/Debug-iphoneos/JordaniaTeam.app/PlugIns/JordaniaTeamUnitTests.xctest"; sourceTree = "<absolute>"; };
+		693712492FFBE0CD00F66303 /* JordaniaTeam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JordaniaTeam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6937124A2FFBE0CD00F66303 /* JordaniaTeamUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JordaniaTeamUnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -99,6 +99,8 @@
 				69A7851E2FF53ED0001905DC /* JordaniaTeamUnitTests */,
 				6937122E2FFBD7C300F66303 /* JordaniaTeamIntegrationTests */,
 				693712482FFBDD1D00F66303 /* JordaniaTeamIntegrationTests.xctest */,
+				693712492FFBE0CD00F66303 /* JordaniaTeam.app */,
+				6937124A2FFBE0CD00F66303 /* JordaniaTeamUnitTests.xctest */,
 			);
 			sourceTree = "<group>";
 		};
@@ -149,7 +151,7 @@
 				693F101F2FCD2546007C635A /* GoogleSignInSwift */,
 			);
 			productName = AuthPlayground;
-			productReference = 693710FD2FF7E59400F66303 /* JordaniaTeam.app */;
+			productReference = 693712492FFBE0CD00F66303 /* JordaniaTeam.app */;
 			productType = "com.apple.product-type.application";
 		};
 		69A7851C2FF53ED0001905DC /* JordaniaTeamUnitTests */ = {
@@ -172,7 +174,7 @@
 			packageProductDependencies = (
 			);
 			productName = JordaniaTeamTests;
-			productReference = 69A7851D2FF53ED0001905DC /* JordaniaTeamUnitTests.xctest */;
+			productReference = 6937124A2FFBE0CD00F66303 /* JordaniaTeamUnitTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
