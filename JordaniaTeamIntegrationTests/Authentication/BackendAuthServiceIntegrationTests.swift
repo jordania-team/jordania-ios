@@ -4,14 +4,11 @@
 //
 //  Sessão 2 — Testa BackendAuthService com HTTP interceptado via MockURLProtocol.
 //
-//  O que esses testes provam:
-//  - O request é formado corretamente (método, headers, body)
-//  - A resposta JSON é decodada nas structs certas
-//  - Erros HTTP são mapeados para os tipos corretos de NetworkError/AuthError
-//
-//  O que NÃO testam (pertence às outras sessões):
-//  - SessionStore, SessionPersistence, Keychain
-//  - TokenProvider e APIClient
+//  Como funciona:
+//  1. TestURLSessionFactory.make() cria uma URLSession.ephemeral com MockURLProtocol registrado.
+//  2. Essa sessão é injetada em BackendAuthService(session:).
+//  3. MockURLProtocol.requestHandler define a resposta determinística para cada teste.
+//  4. Nenhuma chamada de rede real sai do processo.
 //
 
 import Testing
@@ -31,10 +28,15 @@ struct BackendAuthServiceIntegrationTests {
         MockURLProtocol.requestHandler = nil
     }
 
+    /// Cria BackendAuthService com URLSession mockada pronta para interceptar.
+    private func makeService() -> BackendAuthService {
+        BackendAuthService(session: TestURLSessionFactory.make())
+    }
+
     // MARK: - Sucesso
 
     /// Caminho feliz: backend retorna 200 com payload válido.
-    /// Prova: o token retornado é não-vazio e tem formato JWT (três segmentos separados por '.').
+    /// Prova: token é JWT válido (3 segmentos) e usuário é decodificado corretamente.
     @Test("login com 200 decodifica token e usuário corretamente")
     func login_success_decodesTokenAndUser() async throws {
         let loginURL = baseURL
@@ -46,14 +48,7 @@ struct BackendAuthServiceIntegrationTests {
             AuthFixtures.successResponse(for: loginURL)
         }
 
-        // NOTA: BackendAuthService usa URLSession.shared internamente.
-        // Esta limitação é discutida no TESTING.md — quando BackendAuthService
-        // aceitar URLSession injetada, este teste pode usar TestURLSessionFactory.make().
-        // Por enquanto, o MockURLProtocol precisa ser registrado globalmente.
-        // TODO: refatorar BackendAuthService para aceitar URLSession injetada (Task 1.5 da issue).
-        let service = BackendAuthService()
-
-        let session = try await service.login(
+        let session = try await makeService().login(
             provider: .apple,
             identityToken: "fake-identity-token"
         )
@@ -80,10 +75,8 @@ struct BackendAuthServiceIntegrationTests {
             AuthFixtures.unauthorizedResponse(for: loginURL)
         }
 
-        let service = BackendAuthService()
-
         await #expect(throws: NetworkError.unauthorized) {
-            try await service.login(
+            try await makeService().login(
                 provider: .apple,
                 identityToken: "fake-identity-token"
             )
@@ -92,7 +85,7 @@ struct BackendAuthServiceIntegrationTests {
 
     // MARK: - Erro 500
 
-    /// Backend retorna 500 — deve propagar NetworkError.serverError.
+    /// Backend retorna 500 — deve propagar NetworkError.serverError(statusCode: 500).
     @Test("login com 500 lança NetworkError.serverError")
     func login_500_throwsServerError() async throws {
         let loginURL = baseURL
@@ -104,10 +97,8 @@ struct BackendAuthServiceIntegrationTests {
             AuthFixtures.serverErrorResponse(for: loginURL)
         }
 
-        let service = BackendAuthService()
-
         do {
-            try await service.login(
+            try await makeService().login(
                 provider: .apple,
                 identityToken: "fake-identity-token"
             )
@@ -136,10 +127,8 @@ struct BackendAuthServiceIntegrationTests {
             AuthFixtures.invalidPayloadResponse(for: loginURL)
         }
 
-        let service = BackendAuthService()
-
         await #expect(throws: NetworkError.decodingError) {
-            try await service.login(
+            try await makeService().login(
                 provider: .apple,
                 identityToken: "fake-identity-token"
             )
