@@ -4,75 +4,67 @@
 //
 //  Sessão 2 — Testa BackendAuthService com HTTP interceptado via MockURLProtocol.
 //
-//  Como funciona:
-//  1. TestURLSessionFactory.make() cria uma URLSession.ephemeral com MockURLProtocol registrado.
-//  2. Essa sessão é injetada em BackendAuthService(session:).
-//  3. MockURLProtocol.requestHandler define a resposta determinística para cada teste.
-//  4. Nenhuma chamada de rede real sai do processo.
+//  Por que @Suite(.serialized)?
+//  MockURLProtocol.requestHandler é uma `static var` compartilhada por todos os testes.
+//  O Swift Testing roda testes em paralelo por padrão — sem serialização, o handler
+//  de um teste vaza para o próximo, causando respostas erradas.
+//  .serialized garante que cada teste roda sozinho, com seu próprio handler.
 //
 
 import Testing
 import Foundation
 @testable import JordaniaTeam
 
-@Suite("BackendAuthService Integration")
+@Suite("BackendAuthService Integration", .serialized)
 struct BackendAuthServiceIntegrationTests {
 
     // MARK: - Setup
 
-    /// URL base usada nos testes — deve bater com AppConfiguration.apiBaseURL em DEBUG.
     private let baseURL = URL(string: "http://localhost:8080")!
 
     init() {
-        // Garante que nenhum handler residual de teste anterior interfira.
         MockURLProtocol.requestHandler = nil
     }
 
-    /// Cria BackendAuthService com URLSession mockada pronta para interceptar.
     private func makeService() -> BackendAuthService {
         BackendAuthService(session: TestURLSessionFactory.make())
     }
 
-    // MARK: - Sucesso
-
-    /// Caminho feliz: backend retorna 200 com payload válido.
-    /// Prova: token é JWT válido (3 segmentos) e usuário é decodificado corretamente.
-    @Test("login com 200 decodifica token e usuário corretamente")
-    func login_success_decodesTokenAndUser() async throws {
-        let loginURL = baseURL
+    private var loginURL: String {
+        baseURL
             .appendingPathComponent("auth")
             .appendingPathComponent("login")
             .absoluteString
+    }
 
+    // MARK: - Sucesso
+
+    /// Caminho feliz: 200 com payload válido → token JWT + usuário corretos.
+    @Test("login com 200 decodifica token e usuário corretamente")
+    func login_success_decodesTokenAndUser() async throws {
         MockURLProtocol.requestHandler = { _ in
-            AuthFixtures.successResponse(for: loginURL)
+            AuthFixtures.successResponse(for: self.loginURL)
         }
 
-        let session = try await makeService().login(
+        let result = try await makeService().login(
             provider: .apple,
             identityToken: "fake-identity-token"
         )
 
-        let tokenParts = session.accessToken.split(separator: ".")
-        #expect(tokenParts.count == 3, "Token deve ser um JWT com 3 segmentos")
-        #expect(!session.accessToken.isEmpty)
-        #expect(session.user.id == AuthFixtures.testUserID)
-        #expect(session.user.name == "Test User")
-        #expect(session.refreshToken == AuthFixtures.validRefreshToken)
+        #expect(result.accessToken.split(separator: ".").count == 3)
+        #expect(!result.accessToken.isEmpty)
+        #expect(result.user.id == AuthFixtures.testUserID)
+        #expect(result.user.name == "Test User")
+        #expect(result.refreshToken == AuthFixtures.validRefreshToken)
     }
 
     // MARK: - Erro 401
 
-    /// Backend retorna 401 — deve propagar NetworkError.unauthorized.
+    /// 401 → NetworkError.unauthorized
     @Test("login com 401 lança NetworkError.unauthorized")
     func login_401_throwsUnauthorized() async throws {
-        let loginURL = baseURL
-            .appendingPathComponent("auth")
-            .appendingPathComponent("login")
-            .absoluteString
-
         MockURLProtocol.requestHandler = { _ in
-            AuthFixtures.unauthorizedResponse(for: loginURL)
+            AuthFixtures.unauthorizedResponse(for: self.loginURL)
         }
 
         await #expect(throws: NetworkError.unauthorized) {
@@ -85,20 +77,15 @@ struct BackendAuthServiceIntegrationTests {
 
     // MARK: - Erro 500
 
-    /// Backend retorna 500 — deve propagar NetworkError.serverError(statusCode: 500).
+    /// 500 → NetworkError.serverError(statusCode: 500)
     @Test("login com 500 lança NetworkError.serverError")
     func login_500_throwsServerError() async throws {
-        let loginURL = baseURL
-            .appendingPathComponent("auth")
-            .appendingPathComponent("login")
-            .absoluteString
-
         MockURLProtocol.requestHandler = { _ in
-            AuthFixtures.serverErrorResponse(for: loginURL)
+            AuthFixtures.serverErrorResponse(for: self.loginURL)
         }
 
         do {
-            try await makeService().login(
+            _ = try await makeService().login(
                 provider: .apple,
                 identityToken: "fake-identity-token"
             )
@@ -114,17 +101,11 @@ struct BackendAuthServiceIntegrationTests {
 
     // MARK: - Payload inválido
 
-    /// Backend retorna 200 com JSON que não bate com AuthSessionResponse.
-    /// Deve propagar NetworkError.decodingError.
+    /// 200 + JSON inválido → NetworkError.decodingError
     @Test("login com payload inválido lança NetworkError.decodingError")
     func login_invalidPayload_throwsDecodingError() async throws {
-        let loginURL = baseURL
-            .appendingPathComponent("auth")
-            .appendingPathComponent("login")
-            .absoluteString
-
         MockURLProtocol.requestHandler = { _ in
-            AuthFixtures.invalidPayloadResponse(for: loginURL)
+            AuthFixtures.invalidPayloadResponse(for: self.loginURL)
         }
 
         await #expect(throws: NetworkError.decodingError) {
