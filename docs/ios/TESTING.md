@@ -14,7 +14,8 @@
 4. [Testing Concurrency](#testing-concurrency)
 5. [Mocking Strategy](#mocking-strategy)
 6. [Test Organisation](#test-organisation)
-7. [Naming Convention](#naming-convention)
+7. [Integration Tests](#integration-tests)
+8. [Naming Convention](#naming-convention)
 
 ---
 
@@ -288,11 +289,76 @@ JordaniaTeamTests/
 └── Features/
     └── Authentication/
         └── AuthViewModelTests.swift
+
+JordaniaTeamIntegrationTests/
+├── Authentication/
+│   └── BackendAuthServiceIntegrationTests.swift
+├── Session/
+│   ├── SessionPersistenceIntegrationTests.swift
+│   └── SessionStoreIntegrationTests.swift
+└── Helpers/
+    ├── AuthFixtures.swift
+    ├── InMemoryKeychainService.swift
+    ├── MockURLProtocol.swift
+    └── TestURLSessionFactory.swift
 ```
 
 Mirror the source structure. One test file per source file under test, except where a production type is intentionally validated through a higher-value boundary.
 
 `AppleAuthService` and `GoogleAuthService` are examples of this exception: their provider-SDK specifics are not unit-tested directly; the important behavior is verified through `AuthViewModelTests`.
+
+---
+
+## Integration Tests
+
+Integration tests live in the `JordaniaTeamIntegrationTests` target, separate from unit tests. They are included in the default scheme (`cmd+U`) and run alongside unit tests.
+
+### What integration tests prove
+
+Where unit tests isolate a single type with all dependencies mocked, integration tests verify that **two or more real components collaborate correctly**. The boundary is defined by what is real vs. what is simulated:
+
+| Suite | Real components | Simulated boundary |
+|---|---|---|
+| `BackendAuthService Integration` | `BackendAuthService`, `URLSession`, JSON decoding | HTTP responses via `MockURLProtocol` |
+| `SessionPersistence Integration` | `SessionPersistence`, `InMemoryKeychainService`, JWT expiry logic | Keychain (replaced with in-memory equivalent) |
+| `SessionStore Integration` | `SessionStore`, `SessionPersistence`, `InMemoryKeychainService` | Keychain, network |
+
+### HTTP interception with MockURLProtocol
+
+Network calls are intercepted by `MockURLProtocol`, a custom `URLProtocol` subclass registered on a dedicated `URLSession.ephemeral` instance. This session is injected into `BackendAuthService` via `init(session:)` — production code uses `URLSession.shared` by default.
+
+```swift
+// Production: uses URLSession.shared automatically
+let service = BackendAuthService()
+
+// Integration test: intercepts all requests
+let service = BackendAuthService(session: TestURLSessionFactory.make())
+```
+
+`MockURLProtocol.requestHandler` is a `static var`. Because it is shared across all tests, suites that set this handler must be annotated with `@Suite(.serialized)` to prevent parallel tests from reading each other's handlers.
+
+### Fixtures
+
+All response payloads are defined in `AuthFixtures.swift`:
+
+```swift
+AuthFixtures.successResponse(for: url)        // 200 + valid AuthSessionResponse JSON
+AuthFixtures.unauthorizedResponse(for: url)   // 401 + {"error": "Unauthorized"}
+AuthFixtures.serverErrorResponse(for: url)    // 500 + {"error": "Internal Server Error"}
+AuthFixtures.invalidPayloadResponse(for: url) // 200 + JSON missing required keys
+```
+
+### When to add integration tests
+
+Add an integration test when:
+- A new service makes HTTP calls and has non-trivial request construction or response decoding.
+- A persistence layer combines multiple collaborators whose interaction is not covered by unit tests.
+- A regression was caused by a contract mismatch between two real components.
+
+Do **not** add integration tests for:
+- Pure logic with no external collaborators (use unit tests).
+- UI flows (use Previews or manual testing).
+- The real backend (out of scope for this target).
 
 ---
 

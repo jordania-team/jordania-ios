@@ -10,15 +10,16 @@
 
 1. [Current Status](#current-status)
 2. [Phase 1 — Foundation](#phase-1--foundation)
-3. [Phase 2 — Core Features](#phase-2--core-features)
-4. [Phase 3 — Polish and Launch](#phase-3--polish-and-launch)
-5. [Explicitly Deferred](#explicitly-deferred)
+3. [Phase 1.5 — Engineering Hardening](#phase-15--engineering-hardening)
+4. [Phase 2 — Core Features](#phase-2--core-features)
+5. [Phase 3 — Polish and Launch](#phase-3--polish-and-launch)
+6. [Explicitly Deferred](#explicitly-deferred)
 
 ---
 
 ## Current Status
 
-**Phase 1 is complete.** The application skeleton, the authentication system, and the core infrastructure are in place and running on real devices.
+**Phase 1 is complete. Phase 1.5 (Engineering Hardening) is complete.**
 
 The current build:
 - Launches and routes to authentication or the main tab interface based on persisted session state.
@@ -27,6 +28,7 @@ The current build:
 - Performs automatic session validation on launch and handles token refresh transparently.
 - Exposes four main tabs: Feed, Map, Profile, and Search.
 - All four tabs are scaffolded. Their content is not yet implemented.
+- 53 automated tests passing across unit and integration targets (41 unit + 12 integration).
 
 ---
 
@@ -79,6 +81,36 @@ Phase 1 established the engineering skeleton of the application. The goal was no
 **Engineering documentation**
 - `docs/` directory with the full documentation structure (19 Markdown files).
 - Core project documentation (this phase).
+
+---
+
+## Phase 1.5 — Engineering Hardening
+
+**Status: Complete**
+
+Phase 1.5 added automated test coverage across the core infrastructure built in Phase 1. The goal was to prove that the session management, token handling, networking, and authentication layers are correct — and to establish the testing patterns the project will use going forward.
+
+### Completed
+
+**Unit tests — `JordaniaTeamTests` (41 tests)**
+- `SessionStore`: all `SessionState` transitions, Keychain persistence, cold launch restoration, sign-out.
+- `SessionPersistence`: save/load round-trips, expired token handling, clearAll.
+- `TokenProvider`: proactive refresh, reactive refresh after 401, concurrent call coalescing, session expiry sign-out.
+- `APIClient`: success path, 401 → refresh → retry, 401 → refresh → 401 → sign-out, network error mapping.
+- `JWT`: `isExpired` and `needsRefresh` boundary conditions, malformed token handling.
+- `AuthViewModel`: loading state, error messages, cancellation handling, duplicate tap prevention.
+- `NetworkError`: all `URLError` mapping cases.
+
+**Integration tests — `JordaniaTeamIntegrationTests` (12 tests)**
+- `BackendAuthService Integration`: HTTP request/response cycle with `MockURLProtocol` — 200 decode, 401, 500, invalid payload.
+- `SessionPersistence Integration`: real `SessionPersistence` + `InMemoryKeychainService` — save/load, expiry, clear.
+- `SessionStore Integration`: real `SessionStore` + real `SessionPersistence` + `InMemoryKeychainService` — full sign-in/sign-out/restore cycle.
+
+**Testing infrastructure**
+- `MockURLProtocol` — `URLProtocol` subclass that intercepts all requests on a test-scoped `URLSession`.
+- `TestURLSessionFactory` — creates an ephemeral `URLSession` with `MockURLProtocol` registered.
+- `InMemoryKeychainService` — in-memory `KeychainService` substitute for tests that cannot access the real Keychain.
+- `AuthFixtures` — deterministic HTTP response fixtures (success, 401, 500, invalid payload).
 
 ---
 
