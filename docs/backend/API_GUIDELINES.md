@@ -130,13 +130,18 @@ Rules:
 
 ## Timeout Policy
 
-| Request type | `timeoutInterval` |
-|---|---|
-| Login / refresh (auth-critical) | 15 s |
-| Authenticated API requests | 15 s |
-| Logout (best-effort) | 10 s |
+| Request type | `timeoutInterval` | Set by |
+|---|---|---|
+| Login / refresh (auth-critical) | 15 s | `BackendAuthService.post()` |
+| Authenticated API requests | 15 s | `APIClient.authorized(_:token:)` |
+| Logout (best-effort) | 10 s | `BackendAuthService.logout()` |
 
-Timeouts are set per-request, not on `URLSession`. `URLSession.shared` is used throughout — no custom session configuration is needed at this stage.
+Timeouts are enforced at two levels:
+
+1. **Per-request (primary):** `BackendAuthService` sets `timeoutInterval` explicitly on every `URLRequest` it constructs. This is the authoritative value for auth-layer requests.
+2. **APIClient fallback (safety net):** `APIClient.authorized(_:token:)` sets `timeoutInterval = 15` on any request that still carries `URLRequest`'s default value of 60 s. Services that already set their own timeout are unaffected — a lower value set before this point is never overwritten.
+
+`URLSession.shared` is used throughout. No custom `URLSessionConfiguration` is needed because the timeout guarantee lives at the request level.
 
 ---
 

@@ -20,6 +20,10 @@ actor APIClient {
 
     private static let logger = Logger(subsystem: "app.jordania", category: "APIClient")
 
+    /// Timeout aplicado a todo request autenticado que não defina o seu próprio.
+    /// Alinhado com a Timeout Policy em docs/backend/API_GUIDELINES.md.
+    private static let defaultTimeout: TimeInterval = 15
+
     private let tokenProvider: TokenProvider
     private let session: URLSession
     private weak var sessionStore: SessionStore?
@@ -82,6 +86,10 @@ actor APIClient {
 
     private func authorized(_ request: URLRequest, token: String) -> URLRequest {
         var r = request
+        // Garante timeout em requests que não o definiram explicitamente.
+        // Services como BackendAuthService já definem o seu próprio valor,
+        // que prevalece por ser definido antes desta atribuição.
+        if r.timeoutInterval == 60 { r.timeoutInterval = Self.defaultTimeout }
         r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return r
     }
