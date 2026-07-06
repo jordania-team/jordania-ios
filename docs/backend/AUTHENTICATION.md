@@ -63,13 +63,38 @@ SignInWithAppleButton.onCompletion
 ```
 GoogleSignInButton.action
   └─ GoogleAuthService.signIn()
-       ├─ GIDSignIn.sharedInstance.signIn(withPresenting:)
+       ├─ GIDSignIn.sharedInstance.signIn(withPresenting:)   ← PKCE + state gerenciados pelo SDK
        └─ BackendAuthService.login(provider: .google, identityToken:)
             └─ POST /auth/login
                  └─ SessionStore.signIn(user:accessToken:refreshToken:)
 ```
 
 Google session restoration is **not used**. The JWT in the Keychain is the sole source of session truth. `GIDSignIn.restorePreviousSignIn` is never called.
+
+#### PKCE (RFC 7636)
+
+O fluxo OAuth 2.0 do Google requer PKCE para prevenir **code interception attacks** — um atacante que intercepte o `authorization_code` (via URI scheme hijacking ou logs) não consegue trocá-lo por tokens sem o `code_verifier` original.
+
+O GoogleSignIn SDK implementa PKCE automaticamente:
+
+| Etapa | Responsável | O que acontece |
+|---|---|---|
+| Geração do `code_verifier` | SDK | Valor aleatório criptográfico (≥ 256 bits), nunca exposto |
+| Derivação do `code_challenge` | SDK | `BASE64URL(SHA-256(code_verifier))` |
+| Authorization request | SDK | Envia `code_challenge` + `code_challenge_method=S256` |
+| Token exchange | SDK | Envia `code_verifier`; Google valida antes de emitir tokens |
+| Geração do `state` | SDK | Parâmetro CSRF, validado automaticamente no callback |
+
+Nenhum código manual de PKCE é necessário ou possível — o SDK não expõe o `code_verifier` e não permite sobrescrevê-lo. O único valor que atravessa para o backend Jordania é o `idToken` emitido pelo Google após a autenticação bem-sucedida.
+
+**Comparação Apple vs Google:**
+
+| Mecanismo | Apple | Google |
+|---|---|---|
+| Proteção contra replay | Nonce (SHA-256, manual) | PKCE code_verifier (SHA-256, SDK) |
+| Implementação iOS | `AppleAuthService.prepareNonce()` | Automática via GoogleSignIn SDK |
+| Valor enviado ao backend | `rawNonce` | nenhum (apenas `idToken`) |
+| Validação servidor | Backend verifica hash com Apple | Google valida na troca do code |
 
 ---
 
@@ -157,3 +182,4 @@ For Google sign-ins, `GIDSignIn.sharedInstance.signOut()` is called before `Sess
 3. **Raw nonce is consumed once.** `AppleAuthService` sets `currentNonce = nil` in a `defer` block at the start of `handle(_:)`, regardless of outcome.
 4. **Refresh token is never in `AuthenticatedUser`.** The model carries identity information only. Tokens have a separate, isolated storage path.
 5. **Backend owns signature validation.** `JWT.swift` parses claims locally for UX purposes only. The project never validates the JWT signature on the client.
+6. **PKCE is guaranteed for Google Sign In.** `GIDSignIn.sharedInstance.signIn(withPresenting:)` always executes the full PKCE flow (RFC 7636) internally. No authorization code exchange is possible without the matching `code_verifier`. The `code_verifier` is generated and held exclusively by the SDK — it is never accessible or overridable from application code.
