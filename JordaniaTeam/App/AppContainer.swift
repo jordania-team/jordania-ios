@@ -8,6 +8,38 @@
 import Foundation
 import GoogleSignIn
 
+// MARK: - Session Factory
+
+/// Constrói a URLSession de produção com certificate pinning e timeouts explícitos.
+///
+/// Definida fora da classe porque valores default de parâmetros são avaliados
+/// em contexto nonisolated — não pode ser um método `@MainActor`.
+///
+/// Os hashes são valores placeholder — substitua pelos SPKI SHA-256 reais
+/// extraídos do servidor de produção antes do release.
+/// Instruções em `CertificatePinningDelegate.swift`.
+private func makeProductionSession() -> URLSession {
+    let pinningDelegate = CertificatePinningDelegate(pinnedHashes: [
+        // Hash ativo — substitua pelo SPKI SHA-256 real do certificado de produção
+        "PLACEHOLDER_ACTIVE_SPKI_SHA256_BASE64=",
+        // Hash de backup — chave futura já gerada, certificado ainda não deployado.
+        // Garante rotação de certificado sem forçar novo build.
+        "PLACEHOLDER_BACKUP_SPKI_SHA256_BASE64=",
+    ])
+
+    let config = URLSessionConfiguration.default
+    config.timeoutIntervalForRequest  = 15
+    config.timeoutIntervalForResource = 60
+
+    return URLSession(
+        configuration: config,
+        delegate: pinningDelegate,
+        delegateQueue: nil
+    )
+}
+
+// MARK: - AppContainer
+
 /// Compõe e injeta todas as dependências da aplicação.
 /// `JordaniaTeamApp` delega toda a construção e o bootstrap para cá.
 @MainActor
@@ -21,7 +53,7 @@ final class AppContainer {
     init(
         persistence: SessionPersistence,
         authService: BackendAuthService,
-        urlSession: URLSession = AppContainer.makeSession()
+        urlSession: URLSession = makeProductionSession()
     ) {
         let store = SessionStore(persistence: persistence)
         let tokenProvider = TokenProvider(
@@ -57,31 +89,6 @@ final class AppContainer {
     }
 
     // MARK: - Private
-
-    /// Constrói a URLSession de produção com certificate pinning e timeouts explicitados.
-    ///
-    /// Os hashes são valores placeholder — substitua pelos hashes SPKI SHA-256 reais
-    /// extraídos do servidor de produção antes de fazer o release.
-    /// Veja as instruções em `CertificatePinningDelegate.swift`.
-    private static func makeSession() -> URLSession {
-        let pinningDelegate = CertificatePinningDelegate(pinnedHashes: [
-            // Hash ativo — substitua pelo SPKI SHA-256 real do certificado de produção
-            "PLACEHOLDER_ACTIVE_SPKI_SHA256_BASE64=",
-            // Hash de backup — chave futura já gerada, certificado ainda não deployado
-            // Garante rotação de certificado sem forçar novo build
-            "PLACEHOLDER_BACKUP_SPKI_SHA256_BASE64=",
-        ])
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest  = 15
-        config.timeoutIntervalForResource = 60
-
-        return URLSession(
-            configuration: config,
-            delegate: pinningDelegate,
-            delegateQueue: nil
-        )
-    }
 
     private func configureGoogleSignIn() {
         guard
